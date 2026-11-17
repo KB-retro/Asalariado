@@ -466,7 +466,7 @@ private fun MonthSummaryCard(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         StatTile("Horas", hours(s.workedHours), if (s.calendarHours > 0) "de ${hours(s.calendarHours)}" else null, Modifier.weight(1f))
         StatTile("Días", "${s.workedDays}", "trabajados", Modifier.weight(1f))
-        StatTile("Bruto", money(s.expectedGross).replace(",00", ""), "estimado", Modifier.weight(1f))
+        StatTile("Neto", money(s.expectedNet).substringBefore(",") + " €", "a la cuenta", Modifier.weight(1f))
     }
     TextButton(onClick = { detail = !detail }) { Text(if (detail) "Ocultar detalle del mes" else "Ver detalle del mes") }
     if (detail) SectionCard("Detalle de ${monthName(ym.monthValue).lowercase()}", icon = Icons.Default.Insights) {
