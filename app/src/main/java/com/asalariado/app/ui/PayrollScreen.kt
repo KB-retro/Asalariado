@@ -286,7 +286,7 @@ private fun PayslipCard(m: MonthSummary, onEdit: () -> Unit, onImport: () -> Uni
             Text("Aún no la has apuntado. Impórtala (PDF o captura) o escribe lo que pone.", style = MaterialTheme.typography.bodyMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onImport) { Text("Importar") }
-                OutlinedButton(onClick = onEdit) { Text("Apuntar a mano") }
+                OutlinedButton(onClick = onEdit) { Text("A mano") }
             }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {

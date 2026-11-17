@@ -10,6 +10,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -80,6 +82,11 @@ class ScreenshotTest {
                 else compose.onAllNodes(hasText(t), useUnmergedTree = true).onFirst()
                 runCatching { target.performClick() }
                 save(t.lowercase())
+                // Y otra captura desplazando hacia abajo, para ver el resto de la pantalla.
+                if (t == "Turnos" || t == "Nómina" || t == "Médico") {
+                    runCatching { compose.onRoot().performTouchInput { swipeUp(startY = bottom * 0.8f, endY = top + 40f) } }
+                    save(t.lowercase() + "-abajo")
+                }
             }
         }
     }

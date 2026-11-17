@@ -144,9 +144,8 @@ fun CalendarScreen(
                 }
             }
 
-            onboarding()
-            if (c.rotationAnchor == null) RotationBanner(onPick = { vm.startRotationFrom(LocalDate.now(), it) })
             if (ym == YearMonth.now()) TodayStrip(days, calendar, c)
+            if (c.rotationAnchor == null) RotationBanner(onPick = { vm.startRotationFrom(LocalDate.now(), it) })
 
             val ui = LocalUiStyle.current
             Card(
@@ -169,6 +168,8 @@ fun CalendarScreen(
                 }
             }
             MonthSummaryCard(ym, days, calendar, medical, stoppages, c)
+            // La guía va después del calendario para que lo primero que se vea sea el mes.
+            onboarding()
             Legend(showDayTypes = calendar.isNotEmpty())
             Spacer(Modifier.height(16.dp))
         }
@@ -377,10 +378,12 @@ private fun TodayStrip(days: Map<LocalDate, DayEntry>, calendar: Map<LocalDate, 
                 style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val title = when {
                 main == null -> calendar[today]?.label ?: "Sin turno apuntado"
-                main.isWork -> main.label + (entry?.effectiveHours(c)?.let { " · ${it.start.hhmm()}–${it.end.hhmm()}" } ?: "")
                 else -> main.label
             }
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            if (main?.isWork == true) entry?.effectiveHours(c)?.let {
+                Text("${it.start.hhmm()} – ${it.end.hhmm()}", style = MaterialTheme.typography.bodyMedium)
+            }
         }
         if (nextWeek != null) Column(horizontalAlignment = Alignment.End) {
             Text("Próx. semana", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
