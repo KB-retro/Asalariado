@@ -89,6 +89,7 @@ fun shiftColors(s: ShiftType): Pair<Color, Color> {
 fun dayTypeColor(t: DayType): Color = when (t) {
     DayType.LABORABLE -> Color.Transparent
     DayType.JORNADA_CORTA -> Color(0xFFFFE600)
+    DayType.JORNADA_4H -> Color(0xFFF2A33A)
     DayType.ACTIVABLE_LABORABLE -> Color(0xFFB000C0)
     DayType.FESTIVO -> Color(0xFFE53935)
     DayType.SABADO_FR -> Color(0xFF00A050)

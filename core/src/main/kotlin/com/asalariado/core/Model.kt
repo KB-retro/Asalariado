@@ -29,6 +29,7 @@ enum class ShiftType(val code: String, val label: String, val isWork: Boolean) {
 enum class DayType(val label: String, val code: String, val workDay: Boolean, val activable: Boolean) {
     LABORABLE("Laborable", "", true, false),
     JORNADA_CORTA("Jornada de 6 h", "6h", true, false),
+    JORNADA_4H("Jornada de 4 h", "4h", true, false),
     ACTIVABLE_LABORABLE("Activable laborable", "AL", true, false),
     FESTIVO("Domingo o festivo", "F", false, false),
     SABADO_FR("Sábado / festivo recuperable", "S", false, true),

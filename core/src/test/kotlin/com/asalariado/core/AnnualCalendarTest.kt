@@ -7,6 +7,7 @@ import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class AnnualCalendarTest {
 
@@ -100,6 +101,31 @@ class AnnualCalendarTest {
     }
 
     @Test
+    fun fuzzyMonthNames() {
+        assertEquals(1, AnnualCalendarParser.monthOf("ENER0/URTARRILA"))
+        assertEquals(1, AnnualCalendarParser.monthOf("EMERO"))
+        assertEquals(6, AnnualCalendarParser.monthOf("JUNIO / EKAINA"))
+        assertEquals(7, AnnualCalendarParser.monthOf("JULIO"))
+        assertEquals(null, AnnualCalendarParser.monthOf("MESES"))
+    }
+
+    @Test
+    fun missingJanuaryTitleIsInferred() {
+        // Tres filas de títulos; el OCR no ha leído «ENERO».
+        val (img, lines, words) = firstRow2026()
+        val noJanuary = lines.filterNot { it.text.startsWith("ENERO") }
+        val extra = listOf(
+            TextItem("ABRIL / APIRILA", 50, 260, 270, 276),
+            TextItem("MAYO / MAIATZA", 370, 260, 590, 276),
+            TextItem("JUNIO / EKAINA", 690, 260, 910, 276),
+        )
+        val cal = AnnualCalendarParser.parse(noJanuary + extra, img, 2025, words = words.filterNot { it.text == "ENERO" })
+        assertNotNull(cal)
+        assertTrue(1 in cal.months, "meses: ${cal.months}")
+        assertEquals(DayType.FESTIVO, cal.days[LocalDate.of(2026, 1, 4)])
+    }
+
+    @Test
     fun colorClassification() {
         assertEquals(DayType.FESTIVO, AnnualCalendarParser.classifyColor(0xFF0000))
         assertEquals(DayType.SABADO_FR, AnnualCalendarParser.classifyColor(0x00B050))
@@ -108,6 +134,15 @@ class AnnualCalendarTest {
         assertEquals(DayType.ACTIVABLE_LABORABLE, AnnualCalendarParser.classifyColor(0xC000C0))
         assertEquals(DayType.ACTIVABLE_FR, AnnualCalendarParser.classifyColor(0xFF99FF))
         assertEquals(DayType.PUENTE, AnnualCalendarParser.classifyColor(0x66FFFF))
+        // Colores de una foto de papel (calendario 2026).
+        assertEquals(DayType.PUENTE, AnnualCalendarParser.classifyColor(0x648CBA))
+        assertEquals(DayType.VACACIONES, AnnualCalendarParser.classifyColor(0x1C598A))
+        assertEquals(DayType.JORNADA_4H, AnnualCalendarParser.classifyColor(0xD3A348))
+        assertEquals(DayType.FESTIVO, AnnualCalendarParser.classifyColor(0xA3283D))
+        assertEquals(DayType.ACTIVABLE_LABORABLE, AnnualCalendarParser.classifyColor(0xA12B68))
+        assertEquals(DayType.ACTIVABLE_FR, AnnualCalendarParser.classifyColor(0xB27A94))
+        assertEquals(DayType.SABADO_FR, AnnualCalendarParser.classifyColor(0x2B6245))
+        assertEquals(DayType.JORNADA_CORTA, AnnualCalendarParser.classifyColor(0xE1D438))
         assertEquals(DayType.LABORABLE, AnnualCalendarParser.classifyColor(0xFEFEFE))
     }
 
@@ -138,7 +173,7 @@ class AnnualCalendarTest {
             val line = (1..ym.lengthOfMonth()).joinToString(" ") { d -> cal.days[ym.atDay(d)]?.code?.ifEmpty { "." } ?: "?" }
             val days = cal.days.filterKeys { YearMonth.from(it) == ym }.values
             val lab = days.count { it.workDay }
-            val h = days.sumOf { if (it == DayType.JORNADA_CORTA) 6.0 else if (it.workDay) 8.0 else 0.0 }
+            val h = days.sumOf { Payroll.plannedHours(it, Conditions()) }
             total += h
             println("%2d lab=%2d h=%5.0f  %s".format(m, lab, h, line))
         }

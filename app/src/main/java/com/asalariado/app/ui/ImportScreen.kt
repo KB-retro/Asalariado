@@ -384,7 +384,7 @@ private fun MiniMonth(ym: YearMonth, annual: AnnualCalendar) {
                             fontSize = 10.sp,
                             color = when (t) {
                                 null, DayType.LABORABLE -> MaterialTheme.colorScheme.onSurface
-                                DayType.JORNADA_CORTA, DayType.ACTIVABLE_FR -> Color.Black
+                                DayType.JORNADA_CORTA, DayType.JORNADA_4H, DayType.ACTIVABLE_FR -> Color.Black
                                 else -> Color.White
                             },
                         )

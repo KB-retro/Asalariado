@@ -44,8 +44,8 @@ object Rotation {
             DayEntry(d, if (d.dayOfWeek in c.workDays) shift else ShiftType.OFF, source = Source.PATTERN)
         type.workDay -> {
             val def = c.hoursFor(shift)
-            if (type == DayType.JORNADA_CORTA && def != null) {
-                val end = def.start.plusMinutes((c.shortDayHours * 60).toLong())
+            if ((type == DayType.JORNADA_CORTA || type == DayType.JORNADA_4H) && def != null) {
+                val end = def.start.plusMinutes((Payroll.plannedHours(type, c) * 60).toLong())
                 DayEntry(d, shift, def.start, end, source = Source.PATTERN)
             } else {
                 DayEntry(d, shift, source = Source.PATTERN)

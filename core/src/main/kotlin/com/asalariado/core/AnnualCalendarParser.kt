@@ -66,11 +66,62 @@ object AnnualCalendarParser {
     private fun normalize(s: String): String =
         Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("\\p{M}"), "").uppercase()
 
-    private fun monthOf(text: String): Int? {
+    /** Mes al que se refiere una palabra, tolerando un error de OCR (ENER0, EMERO, JUNI0…). */
+    fun monthOf(text: String): Int? {
         val t = normalize(text).trim()
-        val i = MONTHS.indexOfFirst { t.startsWith(it) }
-        if (i >= 0) return i + 1
-        return if (t.startsWith("SETIEMBRE")) 9 else null
+            .replace('0', 'O').replace('1', 'I')
+            .takeWhile { it.isLetter() }
+        if (t.length < 4) return null
+        val exact = MONTHS.indexOfFirst { t.startsWith(it) }
+        if (exact >= 0) return exact + 1
+        if (t.startsWith("SETIEMBRE")) return 9
+        // Un carácter cambiado como mucho, y sólo si no hay empate (JUNIO/JULIO).
+        val close = MONTHS.indices.filter { i ->
+            val name = MONTHS[i]
+            name.length >= 5 && t.length >= name.length && editDistance(t.take(name.length), name) <= 1
+        }
+        return if (close.size == 1) close[0] + 1 else null
+    }
+
+    private fun editDistance(a: String, b: String): Int {
+        val dp = IntArray(b.length + 1) { it }
+        for (i in 1..a.length) {
+            var prev = dp[0]; dp[0] = i
+            for (j in 1..b.length) {
+                val tmp = dp[j]
+                dp[j] = minOf(dp[j] + 1, dp[j - 1] + 1, prev + if (a[i - 1] == b[j - 1]) 0 else 1)
+                prev = tmp
+            }
+        }
+        return dp[b.length]
+    }
+
+    /**
+     * Si el OCR no ha leído el título de algún mes, deduce dónde está a partir de la cuadrícula
+     * que forman los demás (filas y columnas de meses: enero en la fila 1 columna 1, etc.).
+     */
+    private fun inferMissingHeaders(headers: List<Header>): List<Header> {
+        if (headers.size < 4) return headers
+        val h = headers.map { (it.item.bottom - it.item.top).toDouble() }.median()
+        // Agrupar en filas; sólo cuentan las filas con varios meses (la tabla resumen tiene uno por fila).
+        val rows = ArrayList<MutableList<Header>>()
+        for (hd in headers.sortedBy { it.cy }) {
+            val row = rows.lastOrNull()
+            if (row != null && abs(row.first().cy - hd.cy) < h) row += hd else rows += mutableListOf(hd)
+        }
+        val grid = rows.filter { it.size >= 2 }.flatten()
+        val cols = rows.maxOf { it.size }
+        if (cols < 2 || grid.size < 4) return headers
+        val rowY = grid.groupBy { (it.month - 1) / cols }.mapValues { (_, l) -> l.map { it.cy }.median() }
+        val colX = grid.groupBy { (it.month - 1) % cols }.mapValues { (_, l) -> l.map { it.cx }.median() }
+        val w = grid.map { (it.item.right - it.item.left).toDouble() }.median()
+        val present = grid.map { it.month }.toSet()
+        val inferred = (1..12).filter { it !in present }.mapNotNull { m ->
+            val y = rowY[(m - 1) / cols] ?: return@mapNotNull null
+            val x = colX[(m - 1) % cols] ?: return@mapNotNull null
+            Header(m, TextItem(MONTHS[m - 1], (x - w / 2).toInt(), (y - h / 2).toInt(), (x + w / 2).toInt(), (y + h / 2).toInt()))
+        }
+        return headers + inferred
     }
 
     /**
@@ -87,7 +138,7 @@ object AnnualCalendarParser {
     ): AnnualCalendar? {
         val year = forcedYear ?: detectYear(lines) ?: defaultYear
 
-        val headers = findHeaders(lines)
+        val headers = inferMissingHeaders(findHeaders(lines))
         if (headers.isEmpty()) return null
         val nums = (words ?: splitWords(lines)).let { splitWords(it) }.filter { numberRe.matches(it.text) }
             .map { Num(it.text.toInt(), (it.left + it.right) / 2.0, (it.top + it.bottom) / 2.0) }
@@ -250,12 +301,13 @@ object AnnualCalendarParser {
         }
         if (h < 0) h += 360
         return when {
-            h < 20 || h >= 340 -> DayType.FESTIVO
-            h < 40 -> DayType.FESTIVO
+            h < 22 || h >= 340 -> DayType.FESTIVO
+            h < 47 -> DayType.JORNADA_4H // naranja
             h < 75 -> DayType.JORNADA_CORTA
             h < 165 -> if (v > 0.85 && s > 0.6) DayType.PUENTE else DayType.SABADO_FR
             h < 200 -> DayType.PUENTE
-            h < 255 -> DayType.VACACIONES
+            // Azul fuerte = vacaciones; azul claro / apagado = puente.
+            h < 255 -> if (s < 0.6) DayType.PUENTE else DayType.VACACIONES
             h < 290 -> DayType.ACTIVABLE_LABORABLE
             else -> if (s < 0.6) DayType.ACTIVABLE_FR else DayType.ACTIVABLE_LABORABLE
         }

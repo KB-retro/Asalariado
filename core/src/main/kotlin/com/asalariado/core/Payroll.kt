@@ -178,6 +178,7 @@ object Payroll {
     /** Horas de trabajo que corresponden a un tipo de día del calendario laboral. */
     fun plannedHours(t: DayType, c: Conditions): Double = when {
         t == DayType.JORNADA_CORTA -> c.shortDayHours
+        t == DayType.JORNADA_4H -> 4.0
         t.workDay -> c.normalDayHours
         else -> 0.0
     }

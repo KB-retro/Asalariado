@@ -250,7 +250,7 @@ private fun DayCell(
     val typeColor = type?.takeIf { it != DayType.LABORABLE }?.let { dayTypeColor(it) }
     val (bg, fg) = when {
         shift != null -> shiftColors(shift)
-        typeColor != null -> typeColor to if (type == DayType.JORNADA_CORTA || type == DayType.ACTIVABLE_FR) Color.Black else Color.White
+        typeColor != null -> typeColor to if (type == DayType.JORNADA_CORTA || type == DayType.JORNADA_4H || type == DayType.ACTIVABLE_FR) Color.Black else Color.White
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Box(
@@ -416,8 +416,9 @@ private fun DayDialog(
             TextButton(onClick = {
                 if (dayType != type) onType(dayType)
                 // En jornada corta, si no se indica horario, se guarda la duración corta.
-                val autoEnd = if (dayType == DayType.JORNADA_CORTA && start == null && end == null && shift.isWork) {
-                    def?.let { it.start to it.start.plusMinutes((c.shortDayHours * 60).toLong()) }
+                val short = dayType == DayType.JORNADA_CORTA || dayType == DayType.JORNADA_4H
+                val autoEnd = if (short && start == null && end == null && shift.isWork) {
+                    def?.let { it.start to it.start.plusMinutes((Payroll.plannedHours(dayType!!, c) * 60).toLong()) }
                 } else null
                 onSave(DayEntry(date, shift, autoEnd?.first ?: start, autoEnd?.second ?: end, holiday && shift.isWork, note))
             }) { Text("Guardar") }
