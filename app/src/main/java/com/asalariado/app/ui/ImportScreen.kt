@@ -71,6 +71,7 @@ import java.time.LocalDate
 @Composable
 fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Conditions, initialUri: Uri?, onClose: () -> Unit) {
     val st by vm.import.collectAsState()
+    val aiKey by vm.geminiKey.collectAsState()
     var showRaw by remember { mutableStateOf(false) }
     var editIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -119,6 +120,18 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Condit
                     Text("Año:", style = MaterialTheme.typography.bodyMedium)
                     YearSelector(st.annual?.year ?: st.annualYear ?: LocalDate.now().year) { vm.setAnnualYear(it) }
                     Text("(se detecta solo si viene en el calendario)", style = MaterialTheme.typography.labelSmall)
+                }
+                Text(
+                    if (aiKey != null) "Se lee con IA (Gemini) y, si falla, con el lector del móvil."
+                    else "Consejo: pon tu clave gratuita de Gemini en Ajustes → Lectura con IA para que lo lea la IA de Google.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                st.aiNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                if (aiKey != null && !st.loading && !st.aiUsed && (st.annual != null || st.error != null)) {
+                    OutlinedButton(onClick = { vm.readWithAi() }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Leer con IA (Gemini)")
+                    }
                 }
             } else {
                 Text(

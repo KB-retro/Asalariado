@@ -9,6 +9,7 @@ import com.asalariado.app.data.Backup
 import com.asalariado.app.data.PdfText
 import com.asalariado.app.data.SecureFiles
 import com.asalariado.app.data.SecureStore
+import com.asalariado.app.data.GeminiReader
 import com.asalariado.app.data.toExtraEntity
 import com.asalariado.app.data.StoppageEntity
 import com.asalariado.core.Stoppage
@@ -59,6 +60,10 @@ data class ImportState(
     val error: String? = null,
     val rows: List<ImportRow> = emptyList(),
     val rawText: String = "",
+    /** El calendario lo ha leído la IA (Gemini). */
+    val aiUsed: Boolean = false,
+    /** Aviso sobre la lectura con IA (p. ej. por qué no se pudo usar). */
+    val aiNote: String? = null,
     val year: Int = LocalDate.now().year,
     val month: Int = LocalDate.now().monthValue,
 )
@@ -278,6 +283,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         payslipPassword.value = p
     }
 
+    /** Clave de Gemini para leer el calendario con IA, guardada cifrada. */
+    val geminiKey = MutableStateFlow(secure.geminiKey)
+    fun saveGeminiKey(k: String?) {
+        val v = k?.trim()?.takeIf { it.isNotEmpty() }
+        secure.geminiKey = v
+        geminiKey.value = v
+    }
+
     /** ¿Es un PDF de nómina? (lo tiene que abrir la contraseña guardada o no tener). */
     suspend fun isPayslipPdf(uri: Uri): Boolean = withContext(Dispatchers.IO) {
         val app = getApplication<Application>()
@@ -419,14 +432,66 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private var lastOcr: List<Ocr.Result> = emptyList()
 
+    private var lastUris: List<Uri> = emptyList()
+
     fun runOcr(uris: List<Uri>) = viewModelScope.launch {
         if (uris.isEmpty()) return@launch
-        import.value = import.value.copy(loading = true, error = null, annual = null, rows = emptyList(), rawText = "")
+        lastUris = uris
+        import.value = import.value.copy(
+            loading = true, error = null, annual = null, rows = emptyList(), rawText = "", aiUsed = false, aiNote = null,
+        )
+        // Calendario anual con clave de Gemini: se lee con IA y, si falla, con el lector normal.
+        if (import.value.annualMode && geminiKey.value != null) {
+            if (readWithAiNow()) return@launch
+        }
         try {
             lastOcr = uris.flatMap { Ocr.recognize(getApplication(), it, payslipPassword.value) }
             withContext(Dispatchers.Default) { reparseNow(detect = true) }
         } catch (e: Exception) {
             import.value = import.value.copy(loading = false, error = "No se pudo leer el archivo: ${e.message}")
+        }
+    }
+
+    /** Vuelve a leer con IA el último archivo elegido (botón «Leer con IA»). */
+    fun readWithAi() = viewModelScope.launch {
+        if (lastUris.isEmpty() || geminiKey.value == null) return@launch
+        import.value = import.value.copy(loading = true, error = null, aiNote = null)
+        if (!readWithAiNow()) {
+            if (lastOcr.isNotEmpty()) withContext(Dispatchers.Default) { reparseNow(detect = false) }
+            else runCatching {
+                lastOcr = lastUris.flatMap { Ocr.recognize(getApplication(), it, payslipPassword.value) }
+                withContext(Dispatchers.Default) { reparseNow(detect = true) }
+            }
+            import.value = import.value.copy(loading = false, aiNote = aiFailure)
+        }
+    }
+
+    private var aiFailure: String? = null
+
+    /** Lee con Gemini los archivos elegidos; true si ha salido bien. */
+    private suspend fun readWithAiNow(): Boolean {
+        val key = geminiKey.value ?: return false
+        return try {
+            val cals = withContext(Dispatchers.IO) {
+                lastUris.map { GeminiReader.readCalendar(getApplication(), it, key, payslipPassword.value) }
+            }
+            val days = LinkedHashMap<LocalDate, DayType>()
+            cals.forEach { days.putAll(it.days) }
+            val months = cals.flatMap { it.months }.distinct().sorted()
+            val year = import.value.annualYear ?: cals.first().year
+            val cal = AnnualCalendar(year, if (year == cals.first().year) days else days.mapKeys { (d, _) ->
+                runCatching { d.withYear(year) }.getOrDefault(d) }, months)
+            aiFailure = null
+            import.value = import.value.copy(
+                loading = false, annual = cal, error = null, aiUsed = true, yearDetected = import.value.annualYear == null,
+                rawText = "Leído con IA (Gemini): ${months.size} meses del año ${cal.year}.",
+                aiNote = if (months.size < 12) "La IA sólo ha encontrado ${months.size} meses: revisa el calendario." else null,
+            )
+            true
+        } catch (e: Exception) {
+            aiFailure = "No se pudo leer con IA: ${e.message}. Se ha usado el lector normal."
+            import.value = import.value.copy(aiNote = aiFailure)
+            false
         }
     }
 
@@ -438,6 +503,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setAnnualYear(year: Int) {
         import.value = import.value.copy(annualYear = year)
+        val a = import.value.annual
+        if (import.value.aiUsed && a != null && a.year != year) {
+            // Lo leído con IA no se vuelve a pedir: se pasa al año elegido.
+            val days = LinkedHashMap<LocalDate, DayType>()
+            a.days.forEach { (d, t) -> runCatching { d.withYear(year) }.getOrNull()?.let { days[it] = t } }
+            import.value = import.value.copy(annual = AnnualCalendar(year, days, a.months))
+            return
+        }
         if (lastOcr.isNotEmpty()) reparse(detect = false)
     }
 
@@ -520,6 +593,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearImport() {
         lastOcr = emptyList()
+        lastUris = emptyList()
         import.value = ImportState(annualMode = import.value.annualMode)
     }
 }

@@ -23,3 +23,15 @@ class TextMergeTest {
         assertEquals(2027, AnnualCalendarParser.detectYear(lines))
     }
 }
+
+class AiCalendarTest {
+    @Test
+    fun buildsFromAiAnswer() {
+        val cal = AiCalendar.build(2027, mapOf(1 to mapOf("FESTIVO" to listOf(1, 3, 40), "jornada_corta" to listOf(5), "RARO" to listOf(7))))!!
+        assertEquals(listOf(1), cal.months)
+        assertEquals(31, cal.days.size)
+        assertEquals(DayType.FESTIVO, cal.days[java.time.LocalDate.of(2027, 1, 1)])
+        assertEquals(DayType.JORNADA_CORTA, cal.days[java.time.LocalDate.of(2027, 1, 5)])
+        assertEquals(DayType.LABORABLE, cal.days[java.time.LocalDate.of(2027, 1, 7)])
+    }
+}

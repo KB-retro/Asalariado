@@ -41,4 +41,12 @@ class SecureStore(private val context: Context) {
         set(v) {
             if (prefs != null) prefs.edit().putString("payslip_password", v ?: "").apply() else memory = v
         }
+
+    /** Clave de Gemini (IA de Google) para leer el calendario; sólo se guarda cifrada. */
+    private var memoryKey: String? = null
+    var geminiKey: String?
+        get() = prefs?.getString("gemini_key", null)?.takeIf { it.isNotEmpty() } ?: memoryKey
+        set(v) {
+            if (prefs != null) prefs.edit().putString("gemini_key", v ?: "").apply() else memoryKey = v
+        }
 }
