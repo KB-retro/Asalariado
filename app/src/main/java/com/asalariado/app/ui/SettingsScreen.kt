@@ -1,6 +1,5 @@
 package com.asalariado.app.ui
 
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -31,6 +30,8 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -74,7 +75,7 @@ fun SettingsScreen(vm: AppViewModel, prefs: UiPrefs) {
 
         SectionCard("Tema de color", icon = Icons.Default.Palette) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Palette.entries.filter { it != Palette.DINAMICO || Build.VERSION.SDK_INT >= 31 }.forEach { p ->
+                Palette.entries.filter { it != Palette.DINAMICO || dynamicColorAvailable }.forEach { p ->
                     PaletteSwatch(p, selected = prefs.palette == p) { vm.saveUi(prefs.copy(palette = p)) }
                 }
             }
@@ -84,6 +85,47 @@ fun SettingsScreen(vm: AppViewModel, prefs: UiPrefs) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThemeMode.entries.forEach { m ->
                     FilterChip(selected = prefs.mode == m, onClick = { vm.saveUi(prefs.copy(mode = m)) }, label = { Text(m.label) })
+                }
+            }
+        }
+
+        SectionCard("Estilo", icon = Icons.Default.Style) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                UiStyle.entries.forEach { st ->
+                    StylePreview(st, selected = prefs.style == st) {
+                        // Como en Baby Registry: Píxel va con su fuente y al dejarlo se vuelve a Nunito.
+                        val font = when {
+                            st == UiStyle.PIXEL -> AppFont.PIXELIFY
+                            prefs.font == AppFont.PIXELIFY -> AppFont.NUNITO
+                            else -> prefs.font
+                        }
+                        vm.saveUi(prefs.copy(style = st, font = font))
+                    }
+                }
+            }
+        }
+
+        SectionCard("Fuente", icon = Icons.Default.TextFields) {
+            AppFont.entries.forEach { f ->
+                Row(
+                    Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { vm.saveUi(prefs.copy(font = f)) }
+                        .background(if (prefs.font == f) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        f.label,
+                        fontFamily = f.family,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (prefs.font == f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("Nómina 2.136,13 €", fontFamily = f.family, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (prefs.font == f) {
+                        Spacer(Modifier.width(8.dp))
+                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
@@ -142,6 +184,33 @@ private fun PaletteSwatch(p: Palette, selected: Boolean, onClick: () -> Unit) {
         }
         Text(p.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+    }
+}
+
+@Composable
+private fun StylePreview(st: UiStyle, selected: Boolean, onClick: () -> Unit) {
+    val spec = uiStyleSpec(st)
+    val cs = MaterialTheme.colorScheme
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(86.dp).clickable(onClick = onClick)) {
+        Box(
+            Modifier.size(78.dp, 64.dp)
+                .clip(spec.shapes.medium)
+                .background(if (selected) cs.primaryContainer else cs.surfaceVariant)
+                .then(
+                    when {
+                        selected -> Modifier.border(2.dp, cs.primary, spec.shapes.medium)
+                        spec.border > 0.dp -> Modifier.border(spec.border, if (spec.strongBorder) cs.onSurface else cs.outline, spec.shapes.medium)
+                        else -> Modifier
+                    },
+                )
+                .padding(10.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(22.dp).clip(spec.icon).background(cs.primary))
+                Box(Modifier.size(44.dp, 10.dp).clip(spec.pill).background(cs.tertiary))
+            }
+        }
+        Text(st.label, style = MaterialTheme.typography.labelSmall, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
     }
 }
 

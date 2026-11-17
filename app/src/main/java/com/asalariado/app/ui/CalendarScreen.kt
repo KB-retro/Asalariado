@@ -1,5 +1,6 @@
 package com.asalariado.app.ui
 
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.AnimatedContent
@@ -109,6 +110,7 @@ fun CalendarScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SmallFloatingActionButton(onClick = { rotationOpen = true }) {
@@ -130,10 +132,15 @@ fun CalendarScreen(
             TodayHero(days, calendar, c)
             if (c.rotationAnchor == null) RotationBanner(onPick = { vm.startRotationFrom(LocalDate.now(), it) })
 
+            val ui = LocalUiStyle.current
             Card(
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
-                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(
+                    containerColor = if (ui.flatCards) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+                border = ui.cardBorder(),
+                modifier = Modifier.fillMaxWidth().styleShadow(MaterialTheme.shapes.large, ui),
             ) {
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -366,7 +373,7 @@ private fun TodayHero(days: Map<LocalDate, DayEntry>, calendar: Map<LocalDate, D
     val nextWeek = weekShift(monday.plusWeeks(1))
     val main = entry?.shift
     val base = main?.let { shiftColors(it).first }?.takeIf { main.isWork } ?: MaterialTheme.colorScheme.primary
-    HeroCard(colors = listOf(lerp(base, Color.Black, 0.15f), MaterialTheme.colorScheme.primary)) {
+    HeroCard(colors = listOf(base, lerp(base, MaterialTheme.colorScheme.primary, 0.55f))) {
         Text(today.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", ES)).replaceFirstChar { it.uppercase() },
             style = MaterialTheme.typography.labelLarge)
         val title = when {
@@ -380,8 +387,8 @@ private fun TodayHero(days: Map<LocalDate, DayEntry>, calendar: Map<LocalDate, D
                 style = MaterialTheme.typography.bodyLarge)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-            Pill("Esta semana: ${thisWeek?.label ?: "—"}", Color.White.copy(alpha = 0.22f))
-            Pill("Siguiente: ${nextWeek?.label ?: "—"}", Color.White.copy(alpha = 0.22f))
+            Pill("Esta semana: ${thisWeek?.label ?: "—"}", LocalContentColor.current.copy(alpha = 0.14f))
+            Pill("Siguiente: ${nextWeek?.label ?: "—"}", LocalContentColor.current.copy(alpha = 0.14f))
         }
     }
 }

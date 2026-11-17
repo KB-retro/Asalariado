@@ -38,8 +38,9 @@ App Android para llevar el control de tus **turnos, horas y salario** y comproba
 - **Condiciones**: salario bruto anual, pagas (12/14/15, prorrateadas o no), horas anuales, días laborables,
   horario de cada turno, pluses, precio de la hora extra, vacaciones, asuntos propios y horas de médico.
 
-- **Ajustes**: 7 temas de color (incluido el del fondo de pantalla en Android 12+), modo claro/oscuro
-  y 5 fondos (liso, degradado, aurora, ondas, puntos); copia de seguridad.
+- **Ajustes** (igual que Baby Registry): temas Lavanda, Océano, Coral, Bosque, Miel, Grafito y Material You;
+  modo claro/oscuro; estilos Suave, Burbuja, Minimalista, Geométrico y Píxel; fuentes Nunito, Quicksand,
+  Poppins, Lora y Pixelify; fondos; copia de seguridad.
 
 Todos los datos se guardan sólo en el móvil.
 
@@ -71,3 +72,8 @@ Requiere JDK 17 y el Android SDK (Android Studio):
 - `core/` – lógica en Kotlin puro y testeada: modelo, rotación de turnos, cálculo de nómina y
   el intérprete de capturas (`ScheduleParser`).
 - `app/` – app Android con Jetpack Compose, Room y ML Kit Text Recognition.
+
+## Licencias
+
+Las fuentes (Nunito, Quicksand, Poppins, Lora y Pixelify Sans) se distribuyen con la SIL Open Font License;
+ver la carpeta `licenses/`.

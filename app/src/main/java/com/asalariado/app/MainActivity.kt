@@ -126,6 +126,7 @@ private fun App(vm: AppViewModel) {
             } else {
                 Scaffold(
                     containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
                     snackbarHost = { SnackbarHost(snackbar) },
                     bottomBar = {
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.95f)) {

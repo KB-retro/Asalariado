@@ -20,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -123,19 +125,24 @@ fun SectionCard(
     icon: ImageVector? = null,
     content: @Composable () -> Unit,
 ) {
+    val ui = LocalUiStyle.current
+    val shape = MaterialTheme.shapes.large
     Card(
-        modifier.fillMaxWidth().animateContentSize(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier.fillMaxWidth().styleShadow(shape, ui).animateContentSize(),
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (ui.flatCards) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        border = ui.cardBorder(),
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (icon != null) {
                     Box(
-                        Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                        Modifier.size(34.dp).clip(ui.icon).background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+                    ) { Icon(icon, null, Modifier.size(19.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) }
                     Spacer(Modifier.width(10.dp))
                 }
                 Text(title, style = MaterialTheme.typography.titleMedium)
@@ -171,30 +178,39 @@ fun YearSwitcher(year: Int, onChange: (Int) -> Unit) {
     }
 }
 
-/** Tarjeta destacada con degradado de color. */
+/** Tarjeta destacada con degradado de color; el texto se pone claro u oscuro según el fondo. */
 @Composable
 fun HeroCard(
     modifier: Modifier = Modifier,
-    colors: List<Color> = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary),
+    colors: List<Color>? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val ui = LocalUiStyle.current
+    val cs = MaterialTheme.colorScheme
+    val dark = cs.background.luminance() < 0.5f
+    val bg = colors ?: if (dark) listOf(cs.primaryContainer, cs.tertiaryContainer) else listOf(cs.primary, cs.tertiary)
+    val avg = lerp(bg.first(), bg.last(), 0.5f)
+    val fg = if (colors == null && dark) cs.onPrimaryContainer else readableOn(avg)
     Box(
-        modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge)
-            .background(Brush.linearGradient(colors))
+        modifier.fillMaxWidth().styleShadow(ui.hero, ui).clip(ui.hero)
+            .background(Brush.linearGradient(bg))
+            .then(ui.cardBorder()?.let { Modifier.border(it, ui.hero) } ?: Modifier)
             .padding(20.dp)
             .animateContentSize(),
     ) {
-        CompositionLocalProvider(LocalContentColor provides Color.White) {
+        CompositionLocalProvider(LocalContentColor provides fg) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
         }
     }
 }
 
-/** Pastilla pequeña con texto (p. ej. una diferencia de importe). */
+/** Pastilla pequeña con texto; si no se da color de texto, se elige uno legible. */
 @Composable
-fun Pill(text: String, color: Color, onColor: Color = Color.White) {
-    Box(Modifier.clip(CircleShape).background(color).padding(horizontal = 10.dp, vertical = 4.dp)) {
-        Text(text, color = onColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+fun Pill(text: String, color: Color, onColor: Color? = null) {
+    // Sobre una pastilla translúcida se usa el color del texto de alrededor.
+    val fg = onColor ?: if (color.alpha < 0.6f) LocalContentColor.current else readableOn(color)
+    Box(Modifier.clip(LocalUiStyle.current.pill).background(color).padding(horizontal = 10.dp, vertical = 4.dp)) {
+        Text(text, color = fg, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
     }
 }
 

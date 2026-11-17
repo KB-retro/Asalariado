@@ -1,5 +1,6 @@
 package com.asalariado.app.ui
 
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BeachAccess
 import androidx.compose.material.icons.filled.Euro
@@ -86,19 +87,19 @@ fun PayrollScreen(
         }
         item {
             val m = y.months[(if (year == today.year) today.monthValue else 12) - 1]
-            HeroCard(colors = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)) {
+            HeroCard {
                 Text("${monthName(m.month)} ${m.year} · neto esperado", style = MaterialTheme.typography.labelLarge)
                 Text(money(m.expectedNet), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
                 Text("Bruto ${money(m.expectedGross)}", style = MaterialTheme.typography.bodyLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                     val d = m.diffNet ?: m.diffGross
                     when {
-                        d == null -> Pill("Sin nómina apuntada", Color.White.copy(alpha = 0.22f))
+                        d == null -> Pill("Sin nómina apuntada", LocalContentColor.current.copy(alpha = 0.14f))
                         abs(d) < 1 -> Pill("✓ Cuadra con tu nómina", Color(0xFF2E7D32))
                         d < 0 -> Pill("Te faltan ${money(-d)}", Color(0xFFC62828))
-                        else -> Pill("Cobras ${money(d)} de más", Color.White.copy(alpha = 0.3f))
+                        else -> Pill("Cobras ${money(d)} de más", LocalContentColor.current.copy(alpha = 0.2f))
                     }
-                    if (y.monthsWithPayslip > 0) Pill("Año: ${money(y.diffNet)}", Color.White.copy(alpha = 0.22f))
+                    if (y.monthsWithPayslip > 0) Pill("Año: ${money(y.diffNet)}", LocalContentColor.current.copy(alpha = 0.14f))
                 }
             }
         }

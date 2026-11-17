@@ -1,5 +1,6 @@
 package com.asalariado.app.ui
 
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +60,7 @@ fun MedicalScreen(vm: AppViewModel, medical: List<MedicalVisit>, c: Conditions) 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { editing = MedicalVisit(date = LocalDate.now(), start = LocalTime.of(9, 0), end = LocalTime.of(11, 0)) },
@@ -82,8 +84,8 @@ fun MedicalScreen(vm: AppViewModel, medical: List<MedicalVisit>, c: Conditions) 
                             CircularProgressIndicator(
                                 progress = { if (allowed > 0) (used / allowed).toFloat().coerceIn(0f, 1f) else 0f },
                                 modifier = Modifier.size(84.dp),
-                                color = Color.White,
-                                trackColor = Color.White.copy(alpha = 0.25f),
+                                color = LocalContentColor.current,
+                                trackColor = LocalContentColor.current.copy(alpha = 0.22f),
                                 strokeWidth = 8.dp,
                             )
                             Text(hours(used), style = MaterialTheme.typography.titleMedium)
