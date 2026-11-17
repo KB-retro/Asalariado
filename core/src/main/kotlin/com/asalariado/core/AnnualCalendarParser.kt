@@ -20,6 +20,8 @@ data class AnnualCalendar(
     val days: Map<LocalDate, DayType>,
     /** Meses que se han encontrado en la imagen. */
     val months: List<Int>,
+    /** Horas de cada mes según la tabla resumen del propio calendario (si la tiene), para comprobar la lectura. */
+    val expectedHours: Map<Int, Int> = emptyMap(),
 )
 
 /**
@@ -37,6 +39,7 @@ object AnnualCalendarParser {
         "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
     )
     private val numberRe = Regex("""^\d{1,2}$""")
+    private val numberAny = Regex("""^\d{1,3}$""")
     private val yearRe = Regex("""(?<!\d)(20[2-9]\d)(?!\d)""")
 
     private data class Header(val month: Int, val item: TextItem) {
@@ -119,11 +122,14 @@ object AnnualCalendarParser {
         // su columna; así no se confunde con la tabla resumen (meses en una sola columna, más abajo).
         run {
             val cx = colX(); val ry = rowY()
-            for (hd in headers) {
+            val fit = if (ry.size >= 2) leastSquares(ry.map { (k, v) -> k.toDouble() to v }) else null
+            for (hd in headers.sortedBy { it.cy }) {
                 if (hd in grid || grid.any { it.month == hd.month }) continue
                 val x = cx[(hd.month - 1) % cols] ?: continue
-                val y = ry[(hd.month - 1) / cols]
-                if (abs(hd.cx - x) < w * 0.5 && (y == null || abs(hd.cy - y) < h * 1.5)) grid += hd
+                val r = (hd.month - 1) / cols
+                // Altura esperada de su fila: la de sus vecinos o, si no hay, la que toca por la separación entre filas.
+                val y = ry[r] ?: fit?.let { (a, b) -> a + b * r } ?: continue
+                if (abs(hd.cx - x) < w * 0.5 && abs(hd.cy - y) < h * 1.5) grid += hd
             }
         }
         val colX = colX()
@@ -225,7 +231,7 @@ object AnnualCalendarParser {
                 days[ym.atDay(day)] = classifyColor(color)
             }
         }
-        return AnnualCalendar(year, days, best.keys.sorted())
+        return AnnualCalendar(year, days, best.keys.sorted(), summaryHours(words ?: splitWords(lines)))
     }
 
     /**
@@ -248,6 +254,31 @@ object AnnualCalendarParser {
             }
         }
         return out
+    }
+
+    /**
+     * Tabla resumen que traen muchos calendarios («ENERO … 19 148»): horas de cada mes. Se toma el
+     * número más a la derecha de la fila del mes que parece de horas (más de 31, así no se confunde
+     * con los días laborables).
+     */
+    fun summaryHours(words: List<TextItem>): Map<Int, Int> {
+        val ws = splitWords(words)
+        val out = HashMap<Int, Int>()
+        for (w in ws) {
+            val t = normalize(w.text)
+            // Sólo nombres sueltos («ENERO»), no los títulos de la cuadrícula («ENERO / URTARRILA»).
+            val m = monthOf(t) ?: continue
+            val h = (w.bottom - w.top).coerceAtLeast(1)
+            val cy = (w.top + w.bottom) / 2.0
+            val nums = ws.filter { n ->
+                n.left > w.right && numberAny.matches(n.text) && abs((n.top + n.bottom) / 2.0 - cy) < h * 0.6
+            }
+            if (nums.size < 1) continue
+            val hours = nums.sortedBy { it.left }.map { it.text.toInt() }.lastOrNull { it in 32..260 } ?: continue
+            if (m !in out) out[m] = hours
+        }
+        // Si salen muy pocos meses, no es una tabla resumen fiable.
+        return if (out.size >= 6) out else emptyMap()
     }
 
     /** Año del calendario: el «20xx» escrito con letra más grande (normalmente el título). */

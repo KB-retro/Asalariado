@@ -160,28 +160,6 @@ fun SettingsScreen(vm: AppViewModel, prefs: UiPrefs) {
             }
         }
 
-        SectionCard("Lectura con IA", icon = Icons.Default.Lock) {
-            val savedKey by vm.geminiKey.collectAsState()
-            var key by remember(savedKey) { mutableStateOf(savedKey ?: "") }
-            Text(
-                "Con una clave gratuita de Gemini (IA de Google) el calendario laboral se lee con IA, que entiende " +
-                    "capturas y fotos mucho mejor. Sácala en aistudio.google.com → «Get API key» → «Create API key». " +
-                    "Sólo se envía el calendario, nunca las nóminas. Se guarda cifrada en el móvil.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            OutlinedTextField(
-                key, { key = it },
-                label = { Text("Clave de Gemini (AIza…)") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { vm.saveGeminiKey(key) }, enabled = key.trim() != (savedKey ?: "")) { Text("Guardar") }
-                if (savedKey != null) OutlinedButton(onClick = { vm.saveGeminiKey(null) }) { Text("Quitar") }
-            }
-        }
-
         SectionCard("Avisos y widget", icon = Icons.Default.Notifications) {
             val ctx = LocalContext.current
             var on by remember { mutableStateOf(AutoPrefs.notificationsOn(ctx)) }

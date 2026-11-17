@@ -167,6 +167,7 @@ class AnnualCalendarTest {
         val cal = AnnualCalendarParser.parse(items, px, 2027)
         assertNotNull(cal)
         println("Año ${cal.year}, meses ${cal.months}")
+        println("Tabla resumen: ${cal.expectedHours.toSortedMap()}")
         var total = 0.0
         for (m in 1..12) {
             val ym = YearMonth.of(cal.year, m)

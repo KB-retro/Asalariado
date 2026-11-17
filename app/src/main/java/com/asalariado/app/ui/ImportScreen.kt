@@ -71,8 +71,7 @@ import java.time.LocalDate
 @Composable
 fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Conditions, initialUri: Uri?, onClose: () -> Unit) {
     val st by vm.import.collectAsState()
-    val aiKey by vm.geminiKey.collectAsState()
-    // Mientras se lee (sobre todo con IA) la pantalla no se apaga: si se apaga, Android corta internet a la app.
+    // Mientras se lee, la pantalla no se apaga (si se bloquea el móvil, la lectura se para).
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.DisposableEffect(st.loading) {
         view.keepScreenOn = st.loading
@@ -126,18 +125,6 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Condit
                     Text("Año:", style = MaterialTheme.typography.bodyMedium)
                     YearSelector(st.annual?.year ?: st.annualYear ?: LocalDate.now().year) { vm.setAnnualYear(it) }
                     Text("(se detecta solo si viene en el calendario)", style = MaterialTheme.typography.labelSmall)
-                }
-                Text(
-                    if (aiKey != null) "Se lee con IA (Gemini) y, si falla, con el lector del móvil."
-                    else "Consejo: pon tu clave gratuita de Gemini en Ajustes → Lectura con IA para que lo lea la IA de Google.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                st.aiNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-                if (aiKey != null && !st.loading && !st.aiUsed && (st.annual != null || st.error != null || st.aiNote != null)) {
-                    OutlinedButton(onClick = { vm.readWithAi() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Leer con IA (Gemini)")
-                    }
                 }
             } else {
                 Text(
@@ -331,8 +318,29 @@ private fun AnnualPreview(
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (yearDetected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
             )
-            Text("Comprueba que los colores coinciden con tu calendario; luego podrás cambiar cualquier día tocándolo.",
-                style = MaterialTheme.typography.bodySmall)
+            // Comprobación con la tabla de horas del propio calendario.
+            val exp = annual.expectedHours
+            if (exp.isNotEmpty()) {
+                val checked = annual.months.filter { it in exp }
+                val bad = checked.filter { m ->
+                    val ym = YearMonth.of(annual.year, m)
+                    val h = (1..ym.lengthOfMonth()).mapNotNull { annual.days[ym.atDay(it)] }.sumOf { Payroll.plannedHours(it, c) }
+                    kotlin.math.abs(h - exp.getValue(m)) > 0.01
+                }
+                if (bad.isEmpty()) Text(
+                    "✓ Las horas de los ${checked.size} meses coinciden con la tabla del propio calendario.",
+                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                ) else Text(
+                    "⚠ No cuadran con la tabla del calendario: ${bad.joinToString(", ") { monthName(it).lowercase() }}. " +
+                        "Revisa esos meses: toca el día que esté mal después de guardar.",
+                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                Text("Comprueba que los colores coinciden con tu calendario; luego podrás cambiar cualquier día tocándolo.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
             val missing = (1..12).filter { it !in annual.months }
             if (missing.isNotEmpty()) Text(
                 "No he encontrado: ${missing.joinToString(", ") { monthName(it).lowercase() }}. Guarda lo que sí ha salido " +
@@ -359,6 +367,14 @@ private fun AnnualPreview(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("${monthName(m)} · $lab laborables · ${hours(h)}", fontWeight = FontWeight.Medium)
+                    annual.expectedHours[m]?.let { e ->
+                        val ok = kotlin.math.abs(h - e) <= 0.01
+                        Text(
+                            if (ok) "✓ Coincide con la tabla ($e h)" else "⚠ La tabla del calendario dice $e h",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        )
+                    }
                     MiniMonth(ym, annual)
                 }
             }

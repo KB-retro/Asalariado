@@ -24,14 +24,22 @@ class TextMergeTest {
     }
 }
 
-class AiCalendarTest {
+
+class SummaryTableTest {
     @Test
-    fun buildsFromAiAnswer() {
-        val cal = AiCalendar.build(2027, mapOf(1 to mapOf("FESTIVO" to listOf(1, 3, 40), "jornada_corta" to listOf(5), "RARO" to listOf(7))))!!
-        assertEquals(listOf(1), cal.months)
-        assertEquals(31, cal.days.size)
-        assertEquals(DayType.FESTIVO, cal.days[java.time.LocalDate.of(2027, 1, 1)])
-        assertEquals(DayType.JORNADA_CORTA, cal.days[java.time.LocalDate.of(2027, 1, 5)])
-        assertEquals(DayType.LABORABLE, cal.days[java.time.LocalDate.of(2027, 1, 7)])
+    fun readsHoursPerMonth() {
+        val names = listOf("ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO")
+        val hours = listOf(148, 152, 136, 152, 152, 168, 120, 46)
+        val words = ArrayList<TextItem>()
+        names.forEachIndexed { i, n ->
+            val y = 1000 + i * 22
+            words += TextItem(n, 75, y, 150, y + 20)
+            if (i != 7) words += TextItem("${18 + i % 3}", 510, y, 534, y + 20) // laborables (el 6 de agosto no se lee)
+            words += TextItem("${hours[i]}", 611, y, 641, y + 20)
+        }
+        // Un título de la cuadrícula no tiene números en su línea y no debe molestar.
+        words += TextItem("ENERO/URTARRILA", 100, 100, 300, 120)
+        val got = AnnualCalendarParser.summaryHours(words)
+        assertEquals(names.indices.associate { it + 1 to hours[it] }, got)
     }
 }
