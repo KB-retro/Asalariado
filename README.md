@@ -28,6 +28,12 @@ App Android para llevar el control de tus **turnos, horas y salario** y comproba
   se alternan solas hasta fin de año; «Cambiar sólo esta semana» invierte mañana/tarde de esa semana sin tocar el resto.
 - **Médico**: médico general / acompañante (bolsa anual, 16 h por defecto) y especialista propio (sin límite).
   En las horas de médico y los días de libre disposición no se cobra la prima: se descuenta a precio de prima por hora.
+- **Pagas extra aparte**: julio (hacia el día 20) y diciembre (hacia el 15), configurables. Cada una tiene su
+  recibo y se compara con lo esperado. Se generan por semestre y pierden la parte de los días de permiso por
+  nacimiento (lo paga la Seguridad Social) y de huelga.
+- **Huelga, paros y asambleas**: día de huelga y horas de paro no se cobran (salario + prima por hora);
+  las horas o medias horas de asamblea se cobran sin la prima.
+- **Permiso por nacimiento** (paternidad/maternidad): se marca con «Aplicar hasta…»; esos días no los paga la empresa.
 - **Escalones**: tabla salarial Bellota 2026 (escalones 9–21): al elegir el escalón se rellenan jornal, prima,
   prima por hora y nocturnidad.
 - **Importar nómina** (PDF o captura): lee periodo, escalón, jornal, prima, plus de sábados, descuentos de prima,

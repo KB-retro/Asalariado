@@ -36,8 +36,11 @@ data class TablaSalarial(
             baseMonthly = e.salarioMes,
             bonusMonthly = e.primaMes,
             bonusPerHour = e.primaHora,
+            salaryPerHour = e.salarioHora,
             payments = 14,
             proratedExtras = false,
+            extraPayMonths = listOf(7, 12),
+            extraPayDays = listOf(20, 15),
             nightBonusPerHour = Math.round(e.salarioHora * nocturnidadPct) / 100.0,
             annualHours = jornadaAnual,
         )

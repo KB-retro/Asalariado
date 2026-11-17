@@ -26,6 +26,8 @@ data class PayslipData(
     val geroaPercent: Double? = null,
     val seguroVida: Double? = null,
     val pagaExtra: Double? = null,
+    /** El recibo es el de una paga extra (julio / diciembre), no la nómina del mes. */
+    val isExtra: Boolean = false,
 ) {
     val isUseful: Boolean get() = totalDevengos != null || liquido != null || jornal != null
 }
@@ -92,6 +94,12 @@ object PayslipParser {
         val seguro = row { it.startsWith("SEGURODEVIDA") }
         val liquidoLabel = labels.firstOrNull { key(it.text).startsWith("TOTALLIQUIDO") }
         val pagaExtraLabel = labels.firstOrNull { key(it.text).startsWith("PAGAEXTRA") }
+        // Un concepto de paga extra con importe en su fila (no la casilla de bases de abajo).
+        val extraConcept = labels.firstOrNull { l ->
+            val k = key(l.text)
+            (k.startsWith("PAGAEXTRA") || k.startsWith("PEXTRA") || k.startsWith("GRATIFICACION") || k.contains("EXTRAVERANO") ||
+                k.contains("EXTRANAVIDAD") || k.contains("EXTRADICIEMBRE") || k.contains("EXTRAJULIO")) && valuesRightOf(l).isNotEmpty()
+        }
 
         // Descuentos de prima: cantidad (horas) × precio negativo.
         val dtoHours = dtoRows.mapNotNull { v -> v.firstOrNull()?.takeIf { v.size >= 2 } }.sum().takeIf { dtoRows.isNotEmpty() }
@@ -119,6 +127,7 @@ object PayslipParser {
             geroaPercent = geroa?.values?.takeIf { it.size >= 2 }?.first(),
             seguroVida = seguro?.values?.firstOrNull(),
             pagaExtra = pagaExtraLabel?.let { valueBelow(it) },
+            isExtra = extraConcept != null || (jornal == null && prima == null && devengos != null),
         )
     }
 

@@ -28,6 +28,13 @@ object Backup {
             JSONObject().put("y", it.year).put("m", it.month).put("g", it.gross ?: JSONObject.NULL)
                 .put("n", it.net ?: JSONObject.NULL).put("note", it.note)
         }))
+        root.put("extraPayslips", JSONArray(dao.extraPayslipsOnce().map {
+            JSONObject().put("y", it.year).put("m", it.month).put("g", it.gross ?: JSONObject.NULL)
+                .put("n", it.net ?: JSONObject.NULL).put("note", it.note)
+        }))
+        root.put("stoppages", JSONArray(dao.stoppagesOnce().map {
+            JSONObject().put("d", it.epochDay).put("k", it.kind).put("h", it.hours)
+        }))
         return root.toString(1)
     }
 
@@ -39,7 +46,11 @@ object Backup {
         fun arr(k: String) = root.optJSONArray(k) ?: JSONArray()
         fun objs(k: String) = arr(k).let { a -> (0 until a.length()).map { a.getJSONObject(it) } }
         db.withTransaction {
-            dao.clearDays(); dao.clearMedical(); dao.clearPayslips(); dao.clearCalendar()
+            dao.clearDays(); dao.clearMedical(); dao.clearPayslips(); dao.clearCalendar(); dao.clearExtraPayslips(); dao.clearStoppages()
+            dao.insertStoppages(objs("stoppages").map { StoppageEntity(it.getLong("d"), it.getString("k"), it.getDouble("h")) })
+            dao.insertExtraPayslips(objs("extraPayslips").map {
+                ExtraPayslipEntity(it.getInt("y"), it.getInt("m"), it.optDoubleOrNull("g"), it.optDoubleOrNull("n"), it.optString("note"))
+            })
             dao.upsertDays(objs("days").map {
                 DayEntity(it.getLong("d"), it.getString("shift"), it.optIntOrNull("s"), it.optIntOrNull("e"),
                     it.optBoolean("hw"), it.optString("note"), it.optString("src", "MANUAL"))

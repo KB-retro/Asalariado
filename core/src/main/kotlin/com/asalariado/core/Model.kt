@@ -15,6 +15,10 @@ enum class ShiftType(val code: String, val label: String, val isWork: Boolean) {
     VACATION("V", "Vacaciones", false),
     HOLIDAY("F", "Festivo", false),
     PERSONAL("AP", "Asuntos propios", false),
+    /** Día de huelga: no se cobra nada. */
+    STRIKE("H", "Huelga", false),
+    /** Permiso por nacimiento (paternidad/maternidad): paga la Seguridad Social, no la empresa. */
+    PARENTAL("PN", "Permiso nacimiento", false),
     SICK("B", "Baja", false);
 
     companion object {
@@ -56,6 +60,16 @@ data class DayEntry(
     val note: String = "",
     val source: Source = Source.MANUAL,
 )
+
+/** Horas sueltas que afectan al sueldo. */
+enum class StoppageKind(val label: String) {
+    /** Paro por horas (p. ej. por despidos): esas horas no se cobran. */
+    STRIKE("Paro / huelga por horas"),
+    /** Asamblea: se cobra el salario base pero no la prima. */
+    ASSEMBLY("Asamblea"),
+}
+
+data class Stoppage(val date: LocalDate, val kind: StoppageKind, val hours: Double)
 
 /** Tipo de permiso médico. */
 enum class MedicalKind(val label: String, val limited: Boolean) {
@@ -100,15 +114,19 @@ data class Conditions(
     val baseMonthly: Double = 1285.71,
     /** Prima mensual (se cobra en 12 pagas, no en las extra). */
     val bonusMonthly: Double = 0.0,
-    /** Prima por hora: se descuenta por cada hora de médico o de libre disposición. */
+    /** Prima por hora: se descuenta por cada hora de médico, libre disposición o asamblea. */
     val bonusPerHour: Double = 0.0,
+    /** Salario por hora para descontar huelgas y paros (0 = jornal × pagas / horas anuales). */
+    val salaryPerHour: Double = 0.0,
     /** Aportación del trabajador a la EPSV (Geroa); la empresa aporta lo mismo. */
     val geroaPercent: Double = 0.0,
     /** Otros importes que paga la empresa y cotizan (p. ej. seguro de vida), al mes. */
     val employerMonthlyExtras: Double = 0.0,
     val annualHours: Double = 1780.0,
     val payments: Int = 14,
-    val extraPayMonths: List<Int> = listOf(6, 12),
+    /** Meses de las pagas extra y día aproximado de cobro de cada una (se cobran aparte de la nómina). */
+    val extraPayMonths: List<Int> = listOf(7, 12),
+    val extraPayDays: List<Int> = listOf(20, 15),
     val proratedExtras: Boolean = false,
     val shiftHours: Map<ShiftType, ShiftHours> = defaultShiftHours,
     val workDays: Set<DayOfWeek> = setOf(
@@ -140,9 +158,19 @@ data class Conditions(
     /** Bruto anual: jornal en todas las pagas + prima en 12. */
     val grossAnnualSalary: Double get() = baseMonthly * maxOf(payments, 12) + bonusMonthly * 12
 
+    /** Salario hora (sin prima) que se descuenta por cada hora de huelga. */
+    val effectiveSalaryPerHour: Double get() =
+        if (salaryPerHour > 0) salaryPerHour else if (annualHours > 0) baseMonthly * maxOf(payments, 12) / annualHours else 0.0
+
     val hourlyRate: Double get() = if (annualHours > 0) grossAnnualSalary / annualHours else 0.0
 
     fun hoursFor(shift: ShiftType): ShiftHours? = shiftHours[shift]
+
+    /** Día aproximado en que se cobra la paga extra de [month] (null si ese mes no hay). */
+    fun extraPayDay(month: Int): Int? {
+        val i = extraPayMonths.take(maxOf(payments, 12) - 12).indexOf(month)
+        return if (i < 0 || proratedExtras) null else extraPayDays.getOrNull(i) ?: 20
+    }
 
     companion object {
         val defaultShiftHours: Map<ShiftType, ShiftHours> = mapOf(

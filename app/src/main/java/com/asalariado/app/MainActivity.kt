@@ -91,6 +91,8 @@ private fun App(vm: AppViewModel) {
     val calendar by vm.calendar.collectAsState()
     val medical by vm.medical.collectAsState()
     val payslips by vm.payslips.collectAsState()
+    val extraPayslips by vm.extraPayslips.collectAsState()
+    val stoppages by vm.stoppages.collectAsState()
     val conditions by vm.conditions.collectAsState()
     val shared by vm.sharedImage.collectAsState()
     val ui by vm.ui.collectAsState()
@@ -153,9 +155,9 @@ private fun App(vm: AppViewModel) {
                         label = "tabs",
                     ) { t ->
                         when (Tab.entries[t]) {
-                            Tab.Calendar -> CalendarScreen(vm, days, calendar, medical, conditions, onImport = { importing = true })
+                            Tab.Calendar -> CalendarScreen(vm, days, calendar, medical, stoppages, conditions, onImport = { importing = true })
                             Tab.Medical -> MedicalScreen(vm, medical, conditions)
-                            Tab.Payroll -> PayrollScreen(vm, days, calendar, medical, payslips, conditions, vm::savePayslip)
+                            Tab.Payroll -> PayrollScreen(vm, days, calendar, medical, payslips, extraPayslips, stoppages, conditions, vm::savePayslip)
                             Tab.Conditions -> ConditionsScreen(conditions, vm::saveConditions)
                             Tab.Settings -> SettingsScreen(vm, ui)
                         }

@@ -6,6 +6,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.asalariado.app.data.AppDatabase
 import com.asalariado.app.data.Backup
+import com.asalariado.app.data.toExtraEntity
+import com.asalariado.app.data.StoppageEntity
+import com.asalariado.core.Stoppage
+import com.asalariado.core.StoppageKind
 import com.asalariado.app.ui.UiPrefs
 import com.asalariado.app.ui.UiPrefsStore
 import kotlinx.coroutines.Dispatchers
@@ -116,6 +120,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val calendar: StateFlow<Map<LocalDate, DayType>> = dao.allCalendarDays()
         .map { list -> list.mapNotNull { e -> DayType.fromName(e.type)?.let { LocalDate.ofEpochDay(e.epochDay) to it } }.toMap() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    /** Horas de paro y de asamblea. */
+    val stoppages: StateFlow<List<Stoppage>> = dao.allStoppages()
+        .map { list -> list.mapNotNull { it.toModel() } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Guarda las horas de paro o asamblea de un día (0 = borrarlas). */
+    fun setStoppage(date: LocalDate, kind: StoppageKind, hours: Double) = viewModelScope.launch {
+        if (hours <= 0) dao.deleteStoppage(date.toEpochDay(), kind.name)
+        else dao.saveStoppage(StoppageEntity(date.toEpochDay(), kind.name, hours))
+    }
+
+    /** Pone el mismo tipo de día desde [from] hasta [to] (p. ej. un permiso de nacimiento o vacaciones). */
+    fun saveDayRange(template: DayEntry, to: LocalDate) = viewModelScope.launch {
+        val from = template.date
+        if (to.isBefore(from)) return@launch
+        val list = generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }
+            .map { template.copy(date = it, source = Source.MANUAL).toEntity() }.toList()
+        dao.upsertDays(list)
+    }
+
+    /** Recibos de las pagas extra (aparte de la nómina del mes). */
+    val extraPayslips: StateFlow<List<Payslip>> = dao.allExtraPayslips()
+        .map { list -> list.map { it.toModel() } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun saveExtraPayslip(p: Payslip) = viewModelScope.launch {
+        if (p.gross == null && p.net == null && p.note.isBlank()) dao.deleteExtraPayslip(p.year, p.month)
+        else dao.saveExtraPayslip(p.toExtraEntity())
+    }
 
     val payslips: StateFlow<List<Payslip>> = dao.allPayslips()
         .map { list -> list.map { it.toModel() } }
@@ -236,10 +270,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun clearPayslipImport() { payslipImport.value = PayslipImport() }
 
     /** Guarda la nómina leída y, si se pide, actualiza las condiciones con sus datos. */
-    fun commitPayslip(year: Int, month: Int, updateConditions: Boolean) = viewModelScope.launch {
+    fun commitPayslip(year: Int, month: Int, updateConditions: Boolean, asExtra: Boolean) = viewModelScope.launch {
         val p = payslipImport.value.data ?: return@launch
-        dao.savePayslip(Payslip(year, month, p.totalDevengos, p.liquido, "Importada").toEntity())
-        if (updateConditions) {
+        val slip = Payslip(year, month, p.totalDevengos, p.liquido, "Importada")
+        if (asExtra) dao.saveExtraPayslip(slip.toExtraEntity()) else dao.savePayslip(slip.toEntity())
+        // Una paga extra no trae prima, plus ni descuentos: sólo se aprovecha el IRPF.
+        if (updateConditions && asExtra) {
+            p.irpfPercent?.let { store.save(conditions.value.copy(irpfPercent = it)) }
+        } else if (updateConditions) {
             var c = conditions.value
             p.escalon?.let { e -> if (TablaSalarial.BELLOTA_2026.escalon(e) != null) c = TablaSalarial.BELLOTA_2026.aplicar(c, e) }
             c = c.copy(

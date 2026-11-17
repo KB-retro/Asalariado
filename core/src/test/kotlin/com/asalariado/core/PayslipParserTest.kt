@@ -50,6 +50,23 @@ class PayslipParserTest {
         assertEquals(349.0, p.pagaExtra)
     }
 
+    @Test
+    fun detectsExtraPay() {
+        val extra = listOf(
+            t("DEL01/07/2026AL31/07/2026", 627, 112, 344),
+            t("Paga extra verano", 750, 109, 260), t("2.094,02", 750, 740, 809),
+            t("A.-Total Devengos", 853, 137, 278), t("2.094,02", 853, 947, 1016),
+            t("RetencionI.R.P.F.", 875, 112, 246), t("17,00", 875, 507, 554), t("-355,98", 875, 750, 811),
+            t("TOTALLiQUIDOE", 1350, 871, 985), t("1.738,04", 1405, 944, 1013),
+        )
+        val p = PayslipParser.parse(extra)
+        assertEquals(true, p.isExtra)
+        assertEquals(7, p.month)
+        assertEquals(2094.02, p.totalDevengos)
+        assertEquals(1738.04, p.liquido)
+        assertEquals(false, PayslipParser.parse(sample).isExtra)
+    }
+
     /** Con una nómina real (no incluida en el repositorio): -Dreal.payslip=ocr.json */
     @Test
     fun realIfProvided() {

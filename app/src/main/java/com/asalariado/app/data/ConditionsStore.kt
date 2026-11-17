@@ -39,6 +39,7 @@ class ConditionsStore(context: Context) {
             put("annualHours", c.annualHours)
             put("payments", c.payments)
             put("extraPayMonths", JSONArray(c.extraPayMonths))
+            put("extraPayDays", JSONArray(c.extraPayDays))
             put("proratedExtras", c.proratedExtras)
             put("shiftHours", JSONObject().apply {
                 c.shiftHours.forEach { (k, v) -> put(k.name, "${v.start}-${v.end}") }
@@ -86,7 +87,10 @@ class ConditionsStore(context: Context) {
                 employerMonthlyExtras = o.optDouble("employerMonthlyExtras", d.employerMonthlyExtras),
                 annualHours = o.optDouble("annualHours", d.annualHours),
                 payments = o.optInt("payments", d.payments),
-                extraPayMonths = o.optJSONArray("extraPayMonths")?.let { a -> (0 until a.length()).map { a.getInt(it) } } ?: d.extraPayMonths,
+                // Antes las extra iban por defecto en junio y diciembre; ahora julio (~20) y diciembre (~15).
+                extraPayMonths = o.optJSONArray("extraPayMonths")?.let { a -> (0 until a.length()).map { a.getInt(it) } }
+                    ?.takeUnless { !o.has("extraPayDays") && it == listOf(6, 12) } ?: d.extraPayMonths,
+                extraPayDays = o.optJSONArray("extraPayDays")?.let { a -> (0 until a.length()).map { a.getInt(it) } } ?: d.extraPayDays,
                 proratedExtras = o.optBoolean("proratedExtras", d.proratedExtras),
                 shiftHours = shiftHours,
                 workDays = strings("workDays")?.mapNotNull { runCatching { DayOfWeek.valueOf(it) }.getOrNull() }?.toSet() ?: d.workDays,

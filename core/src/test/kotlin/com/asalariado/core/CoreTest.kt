@@ -45,14 +45,23 @@ class PayrollTest {
     private val c = Conditions(baseMonthly = 1500.0, payments = 14, irpfPercent = 10.0, ssPercent = 6.0, nightBonusPerHour = 2.0)
 
     @Test
-    fun extraPayInJune() {
-        val may = Payroll.month(YearMonth.of(2026, 5), emptyList(), emptyList(), c, null)
+    fun extraPayIsSeparate() {
         val june = Payroll.month(YearMonth.of(2026, 6), emptyList(), emptyList(), c, null)
-        assertEquals(1500.0, may.expectedGross, 0.001)
-        assertEquals(3000.0, june.expectedGross, 0.001)
+        val july = Payroll.month(YearMonth.of(2026, 7), emptyList(), emptyList(), c, null, extraPayslip = Payslip(2026, 7, 1300.0, 1300.0))
+        // La nómina de julio no lleva la extra: va en su propio recibo hacia el día 20.
+        assertEquals(null, june.extra)
+        assertEquals(1500.0, july.expectedGross, 0.001)
         // SS sobre base con la extra prorrateada: 1500 + 250 = 1750
-        assertEquals(105.0, june.ssDeduction, 0.001)
-        assertEquals(3000.0 - 105.0 - 300.0, june.expectedNet, 0.001)
+        assertEquals(105.0, july.ssDeduction, 0.001)
+        assertEquals(1500.0 - 105.0 - 150.0, july.expectedNet, 0.001)
+        val extra = july.extra!!
+        assertEquals(20, extra.day)
+        assertEquals(1500.0, extra.gross, 0.001)
+        assertEquals(1350.0, extra.net, 0.001)
+        assertEquals(-50.0, extra.diffNet!!, 0.001)
+        assertEquals(15, Payroll.month(YearMonth.of(2026, 12), emptyList(), emptyList(), c, null).extra!!.day)
+        val y = Payroll.year(2026, emptyList(), emptyList(), emptyList(), c)
+        assertEquals(1500.0 * 14, y.expectedGross, 0.001)
     }
 
     @Test
@@ -84,6 +93,48 @@ class PayrollTest {
         assertEquals(11.0, y.overtimeHours, 0.001)
         assertEquals(2.0, y.medicalHoursUsed, 0.001)
         assertEquals(1.0, y.specialistHours, 0.001)
+    }
+
+    @Test
+    fun strikeAndAssembly() {
+        val cc = TablaSalarial.BELLOTA_2026.aplicar(Conditions(), 10)
+        val ym = YearMonth.of(2026, 3)
+        val days = listOf(
+            DayEntry(LocalDate.of(2026, 3, 2), ShiftType.STRIKE),
+            DayEntry(LocalDate.of(2026, 3, 3), ShiftType.MORNING),
+        )
+        val stops = listOf(
+            Stoppage(LocalDate.of(2026, 3, 3), StoppageKind.STRIKE, 2.0),
+            Stoppage(LocalDate.of(2026, 3, 4), StoppageKind.ASSEMBLY, 0.5),
+        )
+        val base = Payroll.month(ym, emptyList(), emptyList(), cc, null)
+        val m = Payroll.month(ym, days, emptyList(), cc, null, stoppages = stops)
+        // Huelga: 8 h del día + 2 h de paro a (13,8411 + 5,0621) €/h; asamblea: 0,5 h de prima.
+        assertEquals(10.0, m.strikeHours, 0.001)
+        assertEquals(10 * (13.8411 + 5.0621), m.strikeDeduction, 0.001)
+        assertEquals(0.5 * 5.0621, m.assemblyDiscount, 0.001)
+        assertEquals(base.expectedGross - m.strikeDeduction - m.assemblyDiscount, m.expectedGross, 0.001)
+        assertEquals(6.0, m.workedHours, 0.001)
+    }
+
+    @Test
+    fun parentalLeave() {
+        val cc = Conditions(baseMonthly = 2000.0, bonusMonthly = 700.0, payments = 14, irpfPercent = 0.0, ssPercent = 0.0)
+        // 16 semanas desde el 1 de marzo de 2026 (112 días: 1 mar – 20 jun).
+        val start = LocalDate.of(2026, 3, 1)
+        val leave = (0L until 112L).map { DayEntry(start.plusDays(it), ShiftType.PARENTAL) }
+        val march = Payroll.month(YearMonth.of(2026, 3), leave, emptyList(), cc, null)
+        assertEquals(30, march.parentalDays)
+        assertEquals(0.0, march.expectedGross, 0.001)
+        val june = Payroll.month(YearMonth.of(2026, 6), leave, emptyList(), cc, null)
+        assertEquals(20, june.parentalDays)
+        assertEquals(2700.0 * 10 / 30, june.expectedGross, 0.01)
+        // Paga extra de julio: se pierde la parte de los 112 días de permiso (enero–junio: 181 días).
+        val july = Payroll.month(YearMonth.of(2026, 7), leave, emptyList(), cc, null)
+        assertEquals(112, july.extra!!.lostDays)
+        assertEquals(2000.0 * (181 - 112) / 181, july.extra!!.gross, 0.01)
+        // La de diciembre no se ve afectada.
+        assertEquals(2000.0, Payroll.month(YearMonth.of(2026, 12), leave, emptyList(), cc, null).extra!!.gross, 0.01)
     }
 
     /**

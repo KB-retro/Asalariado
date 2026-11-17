@@ -84,6 +84,8 @@ import com.asalariado.core.MedicalVisit
 import com.asalariado.core.Payroll
 import com.asalariado.core.Rotation
 import com.asalariado.core.ShiftType
+import com.asalariado.core.Stoppage
+import com.asalariado.core.StoppageKind
 import com.asalariado.core.effectiveHours
 import java.time.LocalDate
 import java.time.YearMonth
@@ -94,6 +96,7 @@ fun CalendarScreen(
     days: Map<LocalDate, DayEntry>,
     calendar: Map<LocalDate, DayType>,
     medical: List<MedicalVisit>,
+    stoppages: List<Stoppage>,
     c: Conditions,
     onImport: () -> Unit,
 ) {
@@ -105,7 +108,8 @@ fun CalendarScreen(
     }
     var editing by remember { mutableStateOf<LocalDate?>(null) }
     var rotationOpen by remember { mutableStateOf(false) }
-    val medicalDates = remember(medical) { medical.map { it.date }.toSet() }
+    // Punto rojo en los días con médico, paro o asamblea.
+    val medicalDates = remember(medical, stoppages) { (medical.map { it.date } + stoppages.map { it.date }).toSet() }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -188,7 +192,7 @@ fun CalendarScreen(
                 }
             }
             Legend(showDayTypes = calendar.isNotEmpty())
-            MonthSummaryCard(ym, days, calendar, medical, c)
+            MonthSummaryCard(ym, days, calendar, medical, stoppages, c)
             Text(
                 "Toca la columna «Sem» para decir «esta semana estoy de mañana» (las siguientes se alternan solas) " +
                     "o para cambiar sólo esa semana. Toca un día para cambiarlo (vacaciones, horario distinto, festivo…).",
@@ -205,9 +209,12 @@ fun CalendarScreen(
             entry = days[date],
             type = calendar[date],
             c = c,
+            strikeHours = stoppages.firstOrNull { it.date == date && it.kind == StoppageKind.STRIKE }?.hours ?: 0.0,
+            assemblyHours = stoppages.firstOrNull { it.date == date && it.kind == StoppageKind.ASSEMBLY }?.hours ?: 0.0,
+            onStoppage = { k, h -> vm.setStoppage(date, k, h) },
             onType = { vm.setCalendarType(date, it) },
             onDismiss = { editing = null },
-            onSave = { vm.saveDay(it); editing = null },
+            onSave = { e, to -> if (to != null) vm.saveDayRange(e, to) else vm.saveDay(e); editing = null },
             onDelete = { vm.deleteDay(date); editing = null },
         )
     }
@@ -448,14 +455,21 @@ private fun MonthSummaryCard(
     days: Map<LocalDate, DayEntry>,
     calendar: Map<LocalDate, DayType>,
     medical: List<MedicalVisit>,
+    stoppages: List<Stoppage>,
     c: Conditions,
 ) {
-    val s = remember(ym, days, calendar, medical, c) { Payroll.month(ym, days.values, medical, c, null, calendar) }
+    val s = remember(ym, days, calendar, medical, stoppages, c) {
+        Payroll.month(ym, days.values, medical, c, null, calendar, stoppages = stoppages)
+    }
     SectionCard("Resumen de ${monthName(ym.monthValue).lowercase()}", icon = Icons.Default.Insights) {
         KeyValue("Días trabajados", "${s.workedDays}")
         KeyValue("Horas trabajadas", hours(s.workedHours))
         if (s.calendarHours > 0) KeyValue("Horas según calendario laboral", hours(s.calendarHours))
         if (s.activableDays > 0) KeyValue("Activables trabajados", "${s.activableDays} (${hours(s.activableHours)})")
+        if (s.strikeHours > 0) KeyValue("Huelga / paros (sin cobrar)", hours(s.strikeHours))
+        if (s.assemblyHours > 0) KeyValue("Asambleas (sin prima)", hours(s.assemblyHours))
+        if (s.parentalDays > 0) KeyValue("Permiso por nacimiento", "${s.parentalDays} días")
+        s.extra?.let { KeyValue("Paga extra (hacia el ${it.day})", money(it.gross)) }
         if (s.medicalHours > 0) KeyValue("Horas de médico (justificadas)", hours(s.medicalHours))
         if (s.nightHours > 0) KeyValue("Horas nocturnas", hours(s.nightHours))
         if (s.holidayHours > 0) KeyValue("Horas en festivo", hours(s.holidayHours))
@@ -482,11 +496,18 @@ private fun DayDialog(
     entry: DayEntry?,
     type: DayType?,
     c: Conditions,
+    strikeHours: Double,
+    assemblyHours: Double,
+    onStoppage: (StoppageKind, Double) -> Unit,
     onType: (DayType?) -> Unit,
     onDismiss: () -> Unit,
-    onSave: (DayEntry) -> Unit,
+    onSave: (DayEntry, LocalDate?) -> Unit,
     onDelete: () -> Unit,
 ) {
+    var strike by remember { mutableStateOf(strikeHours) }
+    var assembly by remember { mutableStateOf(assemblyHours) }
+    var untilOn by remember { mutableStateOf(false) }
+    var until by remember { mutableStateOf(date.plusWeeks(16).minusDays(1)) }
     var shift by remember { mutableStateOf(entry?.shift ?: ShiftType.MORNING) }
     var start by remember { mutableStateOf(entry?.start) }
     var end by remember { mutableStateOf(entry?.end) }
@@ -537,6 +558,35 @@ private fun DayDialog(
                     val eff = DayEntry(date, shift, start, end).effectiveHours(c)
                     if (eff != null) Text("Total: ${hours(com.asalariado.core.hoursBetween(eff.start, eff.end))}")
                 }
+                when (shift) {
+                    ShiftType.STRIKE -> Text(
+                        "Día de huelga: no se cobra nada (ni salario ni prima) y se descuenta de la paga extra.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary,
+                    )
+                    ShiftType.PARENTAL -> Text(
+                        "Permiso por nacimiento: esos días no los paga la empresa y se descuentan de la paga extra. " +
+                            "Marca «Aplicar hasta» para poner todo el permiso de una vez.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary,
+                    )
+                    else -> {}
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(untilOn, { untilOn = it })
+                    Text("Aplicar hasta…", style = MaterialTheme.typography.bodyMedium)
+                }
+                if (untilOn) DateButton(until, Modifier.fillMaxWidth(), "Hasta") { until = it }
+
+                if (shift.isWork) {
+                    Text("Paros y asambleas", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumberField("Horas de paro", strike, Modifier.weight(1f), "h") { strike = it }
+                        NumberField("Horas asamblea", assembly, Modifier.weight(1f), "h") { assembly = it }
+                    }
+                    Text(
+                        "Paro: esas horas no se cobran. Asamblea: se cobra el salario, no la prima. Admite medias horas (0,5).",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 OutlinedTextField(note, { note = it }, label = { Text("Nota") }, modifier = Modifier.fillMaxWidth())
             }
         },
@@ -548,7 +598,12 @@ private fun DayDialog(
                 val autoEnd = if (short && start == null && end == null && shift.isWork) {
                     def?.let { it.start to it.start.plusMinutes((Payroll.plannedHours(dayType!!, c) * 60).toLong()) }
                 } else null
-                onSave(DayEntry(date, shift, autoEnd?.first ?: start, autoEnd?.second ?: end, holiday && shift.isWork, note))
+                if (strike != strikeHours) onStoppage(StoppageKind.STRIKE, if (shift.isWork) strike else 0.0)
+                if (assembly != assemblyHours) onStoppage(StoppageKind.ASSEMBLY, if (shift.isWork) assembly else 0.0)
+                onSave(
+                    DayEntry(date, shift, autoEnd?.first ?: start, autoEnd?.second ?: end, holiday && shift.isWork, note),
+                    if (untilOn) until else null,
+                )
             }) { Text("Guardar") }
         },
         dismissButton = {

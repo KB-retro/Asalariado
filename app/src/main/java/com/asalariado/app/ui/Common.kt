@@ -96,6 +96,8 @@ fun shiftColors(s: ShiftType): Pair<Color, Color> {
         ShiftType.HOLIDAY -> Color(0xFFE0703A)
         ShiftType.PERSONAL -> Color(0xFFB57BD6)
         ShiftType.SICK -> Color(0xFFD9534F)
+        ShiftType.STRIKE -> Color(0xFF37474F)
+        ShiftType.PARENTAL -> Color(0xFF26A69A)
     }
     val fg = when (s) {
         ShiftType.MORNING -> Color(0xFF3A2D00)

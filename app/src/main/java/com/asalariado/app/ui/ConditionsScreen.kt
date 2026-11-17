@@ -46,7 +46,6 @@ import java.time.DayOfWeek
 @Composable
 fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
     var d by remember(c) { mutableStateOf(c) }
-    var extraMonths by remember(c) { mutableStateOf(c.extraPayMonths.joinToString(", ")) }
     val changed = d != c
 
     Column(
@@ -71,8 +70,12 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
                 NumberField("Prima mensual", d.bonusMonthly, Modifier.weight(1f), "€") { d = d.copy(bonusMonthly = it, escalon = null) }
                 NumberField("Prima por hora", d.bonusPerHour, Modifier.weight(1f), "€") { d = d.copy(bonusPerHour = it, escalon = null) }
             }
+            NumberField("Salario por hora (huelga)", d.effectiveSalaryPerHour, Modifier.fillMaxWidth(), "€") {
+                d = d.copy(salaryPerHour = it, escalon = null)
+            }
             Text(
-                "La prima por hora se descuenta en las horas de médico (de cualquier tipo) y en los días de libre disposición.",
+                "La prima por hora se descuenta en las horas de médico (de cualquier tipo), asambleas y días de libre disposición. " +
+                    "En huelga y paros se descuentan salario + prima por hora.",
                 style = MaterialTheme.typography.labelSmall,
             )
             KeyValue("Bruto anual (jornal × pagas + prima × 12)", money(d.grossAnnualSalary))
@@ -81,8 +84,11 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
                 listOf(12, 14, 15).forEach { p ->
                     FilterChip(selected = d.payments == p, onClick = {
                         d = d.copy(payments = p)
-                        extraMonths = when (p) { 14 -> "6, 12"; 15 -> "3, 6, 12"; else -> extraMonths }
-                        d = d.copy(extraPayMonths = parseMonths(extraMonths))
+                        d = when (p) {
+                            14 -> d.copy(extraPayMonths = listOf(7, 12), extraPayDays = listOf(20, 15))
+                            15 -> d.copy(extraPayMonths = listOf(3, 7, 12), extraPayDays = listOf(20, 20, 15))
+                            else -> d
+                        }
                     }, label = { Text("$p") })
                 }
             }
@@ -91,13 +97,30 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
                     Checkbox(d.proratedExtras, { d = d.copy(proratedExtras = it) })
                     Text("Pagas extra prorrateadas en cada mes")
                 }
-                if (!d.proratedExtras) OutlinedTextField(
-                    extraMonths,
-                    { extraMonths = it; d = d.copy(extraPayMonths = parseMonths(it)) },
-                    label = { Text("Meses de paga extra (1–12)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (!d.proratedExtras) {
+                    Text("Cada paga extra se cobra aparte de la nómina, hacia el día indicado:", style = MaterialTheme.typography.labelLarge)
+                    d.extraPayMonths.take(d.payments - 12).forEachIndexed { i, m ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Paga ${i + 1}", Modifier.width(56.dp))
+                            NumberField("Mes", m.toDouble(), Modifier.weight(1f)) { v ->
+                                val mm = v.toInt().coerceIn(1, 12)
+                                d = d.copy(extraPayMonths = d.extraPayMonths.toMutableList().also { it[i] = mm })
+                            }
+                            NumberField("Día aprox.", (d.extraPayDays.getOrNull(i) ?: 20).toDouble(), Modifier.weight(1f)) { v ->
+                                val dd = v.toInt().coerceIn(1, 31)
+                                val days = d.extraPayDays.toMutableList()
+                                while (days.size <= i) days += 20
+                                days[i] = dd
+                                d = d.copy(extraPayDays = days)
+                            }
+                        }
+                    }
+                    Text(
+                        "La paga de julio se genera de enero a junio y la de diciembre de julio a diciembre: los días de " +
+                            "permiso por nacimiento y de huelga de cada semestre se descuentan de su paga.",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField("IRPF", d.irpfPercent, Modifier.weight(1f), "%") { d = d.copy(irpfPercent = it) }
@@ -191,5 +214,3 @@ private fun EscalonPicker(selected: Int?, onSelect: (Int?) -> Unit) {
     }
 }
 
-private fun parseMonths(s: String): List<Int> =
-    s.split(',', ' ', ';').mapNotNull { it.trim().toIntOrNull() }.filter { it in 1..12 }
