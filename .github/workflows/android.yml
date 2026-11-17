@@ -67,8 +67,8 @@ jobs:
           disable-animations: true
           script: |
             ./gradlew :app:connectedDebugAndroidTest --no-daemon
-            mkdir -p screens
-            adb pull /sdcard/Android/data/com.asalariado.app/files/screens screens || true
+            mkdir -p screens && find app/build/outputs -name '*.png' -path '*additional_output*' -exec cp {} screens/ \;
+            ls screens
       - name: Guardar capturas reducidas en la rama
         if: github.event_name == 'push'
         run: |

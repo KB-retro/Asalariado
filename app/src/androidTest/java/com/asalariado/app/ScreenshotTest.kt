@@ -32,7 +32,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
+import androidx.test.services.storage.TestStorage
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -64,12 +64,11 @@ class ScreenshotTest {
 
     private fun shoot(prefs: UiPrefs, suffix: String) {
         UiPrefsStore(ctx).save(prefs)
-        val dir = File(ctx.getExternalFilesDir(null), "screens").apply { mkdirs() }
         fun save(name: String) {
             compose.waitForIdle()
             Thread.sleep(800)
             val bmp = compose.onRoot().captureToImage().asAndroidBitmap()
-            File(dir, "$name-$suffix.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            TestStorage().openOutputFile("screens/$name-$suffix.png").use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
         ActivityScenario.launch(MainActivity::class.java).use {
             // Primera captura nada más abrir (sirve también para ver qué hay si algo falla).

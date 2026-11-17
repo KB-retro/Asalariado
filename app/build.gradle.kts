@@ -18,6 +18,8 @@ android {
         versionCode = build
         versionName = "1.$build"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Las capturas de los tests se guardan aquí y Gradle las copia al terminar.
+        testInstrumentationRunnerArguments["useTestStorageService"] = "true"
     }
 
     // Clave de firma fija (secretos de GitHub) para que cada versión se instale encima
@@ -65,6 +67,8 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test.services:storage:1.5.0")
+    androidTestUtil("androidx.test.services:test-services:1.5.0")
 
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")
