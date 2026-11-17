@@ -155,9 +155,15 @@ fun PayrollScreen(
             val m = y.months[month - 1]
             item {
                 HeroCard {
-                    Text("Deberías cobrar (neto)", style = MaterialTheme.typography.labelLarge)
-                    Text(money(m.expectedNet), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                    Text("Bruto ${money(m.expectedGross)}", style = MaterialTheme.typography.bodyLarge)
+                    // Lo importante: lo que llega a la cuenta. Si ya está la nómina, lo que llegó de verdad.
+                    val got = m.payslip?.net
+                    Text(if (got != null) "Te llegó a la cuenta" else "Te llega a la cuenta", style = MaterialTheme.typography.titleMedium)
+                    Text(money(got ?: m.expectedNet), style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (got != null) "Debería ser ${money(m.expectedNet)} · bruto ${money(m.expectedGross)}"
+                        else "Neto estimado · bruto ${money(m.expectedGross)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                     val d = m.diffNet ?: m.diffGross
                     Box(Modifier.padding(top = 4.dp)) {
                         when {
@@ -177,8 +183,8 @@ fun PayrollScreen(
             item {
                 SectionCard("Total del año", icon = Icons.Default.Euro) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        StatTile("Neto esperado", money(y.expectedNet).substringBefore(","), null, Modifier.weight(1f))
-                        StatTile("Neto cobrado", if (y.monthsWithPayslip > 0) money(y.receivedNet).substringBefore(",") else "—",
+                        StatTile("Neto del año (a la cuenta)", money(y.expectedNet).substringBefore(","), "estimado, con pagas extra", Modifier.weight(1f))
+                        StatTile("Ya cobrado", if (y.monthsWithPayslip > 0) money(y.receivedNet).substringBefore(",") else "—",
                             "${y.monthsWithPayslip} nóminas", Modifier.weight(1f))
                     }
                     if (y.monthsWithPayslip > 0) {
@@ -314,7 +320,8 @@ private fun ExtraCard(e: ExtraPaySummary, onClick: () -> Unit) {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Paga extra · hacia el ${e.day} de ${monthName(e.month).lowercase()}", style = MaterialTheme.typography.titleMedium)
-            KeyValue("Deberías cobrar (neto)", money(e.net))
+            Text("Te llega a la cuenta", style = MaterialTheme.typography.labelLarge)
+            Text(money(e.payslip?.net ?: e.net), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             if (e.lostDays > 0) Text("Descontados ${e.lostDays} días de permiso o huelga del semestre.", style = MaterialTheme.typography.bodySmall)
             val p = e.payslip
             if (p != null) {

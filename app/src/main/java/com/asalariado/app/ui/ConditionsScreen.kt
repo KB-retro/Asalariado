@@ -53,6 +53,10 @@ import java.time.DayOfWeek
 fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
     var d by remember(c) { mutableStateOf(c) }
     val changed = d != c
+    // Neto y bruto de un mes normal con las condiciones que se están editando.
+    val sample = remember(d) { com.asalariado.core.Payroll.month(YearMonth.of(YearMonth.now().year, 5), emptyList(), emptyList(), d, null) }
+    val netNow = sample.expectedNet
+    val grossNow = sample.expectedGross
     // Se guarda solo: poco después de cada cambio y, si quedaba algo, al salir de la pantalla.
     LaunchedEffect(d) {
         if (d != c) {
@@ -70,7 +74,12 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
     ) {
         ScreenHeader("Contrato", "Tu contrato y convenio: con esto se calcula lo que deberías cobrar")
 
-        ExpandableCard("Salario", (d.escalon?.let { "Escalón $it · " } ?: "") + "jornal ${money(d.baseMonthly)} + prima ${money(d.bonusMonthly)}", Icons.Default.Euro, initiallyOpen = true) {
+        ExpandableCard("Salario", "≈ ${money(netNow)} netos al mes" + (d.escalon?.let { " · escalón $it" } ?: ""), Icons.Default.Euro, initiallyOpen = true) {
+            // Lo primero: lo que llega a la cuenta cada mes con estos datos.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                StatTile("Te llega al mes", money(netNow), "neto aproximado", Modifier.weight(1f))
+                StatTile("Bruto al mes", money(grossNow), "sin pagas extra", Modifier.weight(1f))
+            }
             EscalonPicker(d.escalon) { n ->
                 d = if (n == null) d.copy(escalon = null) else TablaSalarial.BELLOTA_2026.aplicar(d, n)
             }
