@@ -48,6 +48,13 @@ object GeminiReader {
                 val (code, text) = http("$BASE/models/$model:generateContent", key, body, left().toInt())
                 when {
                     code == 200 -> return parse(text)
+                    code == -1 -> {
+                        if (attempt == 2) throw AiError(
+                            "sin conexión con Google ($text). Comprueba que tienes internet; si usas un bloqueador " +
+                                "de anuncios, una VPN o «DNS privado», puede estar bloqueando a Gemini",
+                        )
+                        Thread.sleep(minOf(3_000L, maxOf(0L, left() - 8_000)))
+                    }
                     code == 404 -> { lastError = AiError("modelo $model no disponible"); break }
                     code == 400 && text.contains("API_KEY", ignoreCase = true) ->
                         throw AiError("la clave de Gemini no es válida (revísala en Ajustes)")
@@ -104,7 +111,8 @@ object GeminiReader {
         } catch (e: java.net.SocketTimeoutException) {
             throw AiError("Gemini está tardando demasiado; prueba en unos minutos")
         } catch (e: java.io.IOException) {
-            throw AiError("sin conexión con Google (${e.javaClass.simpleName})")
+            // Sin conexión (o el nombre de Google no se resuelve): se marca para reintentar.
+            return -1 to (e.javaClass.simpleName ?: "IOException")
         } finally {
             conn.disconnect()
         }
