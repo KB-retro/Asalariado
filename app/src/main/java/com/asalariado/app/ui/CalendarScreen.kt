@@ -94,7 +94,7 @@ fun CalendarScreen(
                 ExtendedFloatingActionButton(
                     onClick = onImport,
                     icon = { Icon(Icons.Default.AddPhotoAlternate, null) },
-                    text = { Text("Subir captura") },
+                    text = { Text("Importar") },
                 )
             }
         },

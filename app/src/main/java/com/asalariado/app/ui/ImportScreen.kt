@@ -37,6 +37,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -74,12 +76,16 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Condit
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { uris ->
         if (uris.isNotEmpty()) vm.runOcr(uris)
     }
+    // Calendario anual: acepta el PDF directamente o una imagen.
+    val docPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.runOcr(listOf(uri))
+    }
     LaunchedEffect(initialUri) { initialUri?.let { vm.runOcr(listOf(it)) } }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Importar horario") },
+                title = { Text("Importar") },
                 navigationIcon = {
                     IconButton(onClick = { vm.clearImport(); onClose() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") }
                 },
@@ -87,33 +93,55 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Condit
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                "Elige una o varias capturas de tu cuadrante o de tu calendario laboral anual. La app las lee en el móvil " +
-                    "(sin enviarlas a ningún sitio): en un cuadrante detecta fechas y turnos (Mañana/Tarde/Noche, M/T/N, " +
-                    "Libre, 06:00-14:00…); en un calendario anual de colores, el tipo de cada día (festivos, sábados, " +
-                    "vacaciones, jornadas de 6 h, activables…). Antes de guardar puedes revisarlo.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Button(
-                onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Default.PhotoLibrary, null)
-                Spacer(Modifier.size(8.dp))
-                Text("Elegir capturas")
+            TabRow(selectedTabIndex = if (st.annualMode) 0 else 1) {
+                Tab(selected = st.annualMode, onClick = { vm.setImportMode(true) }, text = { Text("Calendario anual") })
+                Tab(selected = !st.annualMode, onClick = { vm.setImportMode(false) }, text = { Text("Cuadrante de turnos") })
             }
-
-            MonthSelector(st.year, st.month) { y, m -> vm.setImportMonth(y, m) }
-            Text(
-                "Mes que se usa cuando la captura sólo pone el número del día.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (st.annualMode) {
+                Text(
+                    "Sube el calendario laboral del año entero (el PDF del convenio o una captura). La app busca los 12 meses " +
+                        "y lee el color de cada día: festivos, sábados/F.R., vacaciones, jornadas de 6 h, activables y puentes.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Button(
+                    onClick = { docPicker.launch(arrayOf("application/pdf", "image/*")) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.PhotoLibrary, null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Elegir PDF o imagen del año")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Año:", style = MaterialTheme.typography.bodyMedium)
+                    YearSelector(st.annual?.year ?: st.annualYear ?: LocalDate.now().year) { vm.setAnnualYear(it) }
+                    Text("(se detecta solo si viene en el calendario)", style = MaterialTheme.typography.labelSmall)
+                }
+            } else {
+                Text(
+                    "Elige una o varias capturas de tu cuadrante de turnos. La app lee en el móvil (sin enviarlas a ningún " +
+                        "sitio) las fechas y turnos (Mañana/Tarde/Noche, M/T/N, Libre, 06:00-14:00…) y te deja revisarlos.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Button(
+                    onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.PhotoLibrary, null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Elegir capturas")
+                }
+                MonthSelector(st.year, st.month) { y, m -> vm.setImportMonth(y, m) }
+                Text(
+                    "Mes que se usa cuando la captura sólo pone el número del día.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             when {
                 st.loading -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 st.error != null -> Text(st.error!!, color = MaterialTheme.colorScheme.error)
-                st.annual != null -> {}
+                st.annual != null || st.annualMode -> {}
                 st.rawText.isNotEmpty() && st.rows.isEmpty() -> {
                     Text(
                         "No he encontrado fechas con turno en la imagen. Prueba a recortar la captura para que sólo " +
@@ -146,7 +174,7 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Condit
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-            } else if (st.rawText.isNotEmpty() && st.annual == null) {
+            } else if (st.rawText.isNotEmpty() && st.annual == null && !st.loading) {
                 OutlinedButton(onClick = { showRaw = true }) { Text("Ver texto leído") }
             }
         }
@@ -209,6 +237,18 @@ private fun ImportRowView(row: ImportRow, current: DayEntry?, onToggle: (Boolean
             Box(Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)).background(bg), contentAlignment = Alignment.Center) {
                 Text(row.day.shift.code, color = fg, fontWeight = FontWeight.Bold)
             }
+        }
+    }
+}
+
+@Composable
+fun YearSelector(year: Int, onChange: (Int) -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { menu = true }) { Text("$year") }
+        val now = LocalDate.now().year
+        DropdownMenu(menu, { menu = false }) {
+            (now - 1..now + 2).forEach { y -> DropdownMenuItem(text = { Text("$y") }, onClick = { onChange(y); menu = false }) }
         }
     }
 }

@@ -73,9 +73,13 @@ object AnnualCalendarParser {
         return if (t.startsWith("SETIEMBRE")) 9 else null
     }
 
-    fun parse(lines: List<TextItem>, pixels: PixelSource, defaultYear: Int): AnnualCalendar? {
+    /**
+     * @param defaultYear año si no aparece en la imagen.
+     * @param forcedYear año elegido por el usuario (manda sobre el detectado).
+     */
+    fun parse(lines: List<TextItem>, pixels: PixelSource, defaultYear: Int, forcedYear: Int? = null): AnnualCalendar? {
         val words = splitWords(lines)
-        val year = detectYear(lines) ?: defaultYear
+        val year = forcedYear ?: detectYear(lines) ?: defaultYear
 
         val headers = words.mapNotNull { w -> monthOf(w.text)?.let { Header(it, w) } }
         if (headers.isEmpty()) return null

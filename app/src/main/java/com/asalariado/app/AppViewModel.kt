@@ -32,6 +32,10 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 data class ImportState(
+    /** true = calendario laboral anual (PDF o imagen con colores); false = cuadrante de turnos. */
+    val annualMode: Boolean = true,
+    /** Año elegido a mano para el calendario anual (null = el que ponga la imagen). */
+    val annualYear: Int? = null,
     val loading: Boolean = false,
     /** Calendario laboral anual detectado por colores (si la captura lo es). */
     val annual: AnnualCalendar? = null,
@@ -152,13 +156,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun runOcr(uris: List<Uri>) = viewModelScope.launch {
         if (uris.isEmpty()) return@launch
-        import.value = import.value.copy(loading = true, error = null)
+        import.value = import.value.copy(loading = true, error = null, annual = null, rows = emptyList(), rawText = "")
         try {
-            lastOcr = uris.map { Ocr.recognize(getApplication(), it) }
+            lastOcr = uris.flatMap { Ocr.recognize(getApplication(), it) }
             reparse(detect = true)
         } catch (e: Exception) {
-            import.value = import.value.copy(loading = false, error = "No se pudo leer la imagen: ${e.message}")
+            import.value = import.value.copy(loading = false, error = "No se pudo leer el archivo: ${e.message}")
         }
+    }
+
+    fun setImportMode(annual: Boolean) {
+        if (annual == import.value.annualMode) return
+        import.value = import.value.copy(annualMode = annual)
+        if (lastOcr.isNotEmpty()) reparse(detect = false)
+    }
+
+    fun setAnnualYear(year: Int) {
+        import.value = import.value.copy(annualYear = year)
+        if (lastOcr.isNotEmpty()) reparse(detect = false)
     }
 
     fun setImportMonth(year: Int, month: Int) {
@@ -177,12 +192,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         var annualYear: Int? = null
         val annualMonths = sortedSetOf<Int>()
         for (r in lastOcr) {
-            val a = AnnualCalendarParser.parse(r.words, r.pixels, year) ?: continue
-            if (a.months.size >= 2) {
+            val a = AnnualCalendarParser.parse(r.words, r.pixels, st.annualYear ?: year, st.annualYear) ?: continue
+            if (a.months.size >= (if (st.annualMode) 1 else 2)) {
                 annualDays.putAll(a.days); annualYear = a.year; annualMonths.addAll(a.months)
             }
         }
         val annual = annualYear?.let { AnnualCalendar(it, annualDays, annualMonths.toList()) }
+        if (st.annualMode) {
+            import.value = st.copy(
+                loading = false,
+                annual = annual,
+                rows = emptyList(),
+                rawText = lastOcr.joinToString("\n\n——\n\n") { it.fullText },
+                error = if (annual == null) {
+                    "No he encontrado los meses del calendario. Comprueba que se ven los nombres de los meses " +
+                        "(ENERO, FEBRERO…) y los números de los días. Si es un cuadrante de turnos, usa la otra pestaña."
+                } else null,
+            )
+            return
+        }
         for (r in lastOcr) {
             val res = ScheduleParser.parse(r.lines, year, month, c)
             if (detect && res.detectedYear != null && res.detectedMonth != null) {
@@ -221,6 +249,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearImport() {
         lastOcr = emptyList()
-        import.value = ImportState()
+        import.value = ImportState(annualMode = import.value.annualMode)
     }
 }

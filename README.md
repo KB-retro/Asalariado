@@ -15,7 +15,8 @@ App Android para llevar el control de tus **turnos, horas y salario** y comproba
   - listas tipo `Lunes 3 Mañana`, `04/11 14:00-22:00`, `6 nov Noche`;
   - tablas/cuadrantes con una fila de días y otra de turnos (`M`, `T`, `N`, `L`, `D`, `V`, `F`).
   Antes de guardar puedes revisar y corregir cada día.
-- **Calendario laboral anual por colores** (como el de convenio de 12 meses): sube la captura
+- **Calendario laboral anual por colores** (como el de convenio de 12 meses): en Importar →
+  «Calendario anual» eliges directamente el **PDF** o una captura
   y la app localiza cada mes, encaja la cuadrícula con los números que lee y mira el **color** de cada casilla:
   rojo = domingo/festivo, verde = sábado/F.R., azul = vacaciones, amarillo = jornada de 6 h,
   morado = activable laborable, rosa = activable F.R., celeste/verde claro = puente.
