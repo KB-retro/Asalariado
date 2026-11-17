@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copia de Google (Android 6–11): sin los PDF de nóminas, sin la contraseña cifrada ni el bloqueo. -->
+<full-backup-content>
+    <exclude domain="file" path="nominas/" />
+    <exclude domain="sharedpref" path="secure.xml" />
+    <exclude domain="sharedpref" path="lock.xml" />
+</full-backup-content>

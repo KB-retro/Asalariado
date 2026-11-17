@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <files-path name="nominas" path="nominas/" />
+    <!-- Copias temporales descifradas para ver una nómina (se borran al volver a abrir la app). -->
+    <cache-path name="ver" path="ver/" />
     <cache-path name="informes" path="informes/" />
 </paths>

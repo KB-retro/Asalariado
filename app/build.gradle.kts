@@ -86,6 +86,8 @@ dependencies {
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     // Guardar la contraseña de las nóminas cifrada.
     implementation("androidx.security:security-crypto:1.0.0")
+    // Bloqueo con huella o PIN del móvil.
+    implementation("androidx.biometric:biometric:1.1.0")
     // Avisos y copias automáticas.
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("androidx.documentfile:documentfile:1.0.1")

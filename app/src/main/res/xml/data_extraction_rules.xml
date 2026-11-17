@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copia de Google y paso a otro móvil (Android 12+): sin los PDF de nóminas, la contraseña ni el bloqueo. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="nominas/" />
+        <exclude domain="sharedpref" path="secure.xml" />
+        <exclude domain="sharedpref" path="lock.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="nominas/" />
+        <exclude domain="sharedpref" path="secure.xml" />
+        <exclude domain="sharedpref" path="lock.xml" />
+    </device-transfer>
+</data-extraction-rules>

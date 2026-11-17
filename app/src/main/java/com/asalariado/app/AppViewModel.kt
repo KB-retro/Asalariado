@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.asalariado.app.data.AppDatabase
 import com.asalariado.app.data.Backup
 import com.asalariado.app.data.PdfText
+import com.asalariado.app.data.SecureFiles
 import com.asalariado.app.data.SecureStore
 import com.asalariado.app.data.toExtraEntity
 import com.asalariado.app.data.StoppageEntity
@@ -334,9 +335,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearPayslipImport() { payslipImport.value = PayslipImport() }
 
-    /** Archivo donde se guarda la copia (sin contraseña) del PDF de una nómina. */
-    fun payslipFile(year: Int, month: Int, extra: Boolean): java.io.File =
-        java.io.File(getApplication<Application>().filesDir, "nominas/%04d-%02d%s.pdf".format(year, month, if (extra) "-extra" else ""))
 
     /**
      * Guarda todas las nóminas leídas (con su PDF) y, si se pide, actualiza las condiciones con los
@@ -350,9 +348,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (it.asExtra) dao.saveExtraPayslip(slip.toExtraEntity()) else dao.savePayslip(slip.toEntity())
             it.pdf?.let { bytes ->
                 withContext(Dispatchers.IO) {
-                    val f = payslipFile(it.year, it.month, it.asExtra)
-                    f.parentFile?.mkdirs()
-                    f.writeBytes(bytes)
+                    runCatching { SecureFiles.savePayslip(getApplication(), it.year, it.month, it.asExtra, bytes) }
                 }
             }
         }

@@ -62,6 +62,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.ui.draw.clip
 import com.asalariado.core.Conditions
 import com.asalariado.app.data.Report
+import com.asalariado.app.data.SecureFiles
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.rememberCoroutineScope
@@ -502,15 +503,18 @@ private fun ImportedPayslipCard(
 @Composable
 private fun PdfLink(year: Int, month: Int, extra: Boolean) {
     val ctx = LocalContext.current
-    val file = remember(year, month, extra) {
-        java.io.File(ctx.filesDir, "nominas/%04d-%02d%s.pdf".format(year, month, if (extra) "-extra" else ""))
-    }
-    if (!file.exists()) return
+    val scope = rememberCoroutineScope()
+    if (!remember(year, month, extra) { SecureFiles.exists(ctx, year, month, extra) }) return
     TextButton(onClick = {
-        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
-        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        runCatching { ctx.startActivity(Intent.createChooser(intent, "Abrir nómina")) }
+        scope.launch {
+            // El PDF está cifrado: se descifra en una copia temporal sólo para abrirlo.
+            val file = withContext(Dispatchers.IO) { runCatching { SecureFiles.decryptForViewing(ctx, year, month, extra) }.getOrNull() }
+                ?: return@launch
+            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
+            val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            runCatching { ctx.startActivity(Intent.createChooser(intent, "Abrir nómina")) }
+        }
     }) { Text("Ver PDF de la nómina") }
 }
 

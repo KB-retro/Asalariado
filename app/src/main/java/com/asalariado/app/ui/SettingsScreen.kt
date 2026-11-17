@@ -39,6 +39,9 @@ import androidx.compose.ui.platform.LocalContext
 import com.asalariado.app.work.AutoPrefs
 import com.asalariado.app.work.Scheduler
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Fingerprint
+import com.asalariado.app.AppLock
+import com.asalariado.app.MainActivity
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.IconButton
@@ -152,6 +155,47 @@ fun SettingsScreen(vm: AppViewModel, prefs: UiPrefs) {
                     BackdropPreview(b, selected = prefs.backdrop == b) { vm.saveUi(prefs.copy(backdrop = b)) }
                 }
             }
+        }
+
+        SectionCard("Seguridad", icon = Icons.Default.Fingerprint) {
+            val ctx = LocalContext.current
+            val activity = ctx as? MainActivity
+            val available = remember { AppLock.available(ctx) }
+            var lockOn by remember { mutableStateOf(AppLock.enabled(ctx)) }
+            var hide by remember { mutableStateOf(AppLock.hideInRecents(ctx)) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(lockOn, { want ->
+                    if (want) {
+                        // Se pide la huella o el PIN una vez para comprobar que funciona antes de activarlo.
+                        activity?.confirmLock { AppLock.setEnabled(ctx, true); lockOn = true }
+                    } else {
+                        AppLock.setEnabled(ctx, false); lockOn = false
+                    }
+                }, enabled = available || lockOn)
+                Spacer(Modifier.width(10.dp))
+                Text("Bloquear la app con la huella o el PIN del móvil", style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(
+                if (available) "Se pedirá al abrir la app y al volver a ella tras más de un minuto fuera."
+                else "Para usarlo, configura primero un bloqueo de pantalla (PIN, patrón o huella) en los ajustes del móvil.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (available) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(hide, { on -> AppLock.setHideInRecents(ctx, on); hide = on; activity?.applySecureFlag() })
+                Spacer(Modifier.width(10.dp))
+                Text("Ocultar la app en «recientes»", style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(
+                "Tapa tus datos en la lista de apps abiertas. Mientras esté activo no se pueden hacer capturas de la app.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "La contraseña de las nóminas y los PDF guardados están cifrados con una clave que no sale del móvil.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         SectionCard("Nóminas en PDF", icon = Icons.Default.Lock) {

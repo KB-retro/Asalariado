@@ -4,7 +4,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
+import android.view.WindowManager
+import com.asalariado.app.data.SecureFiles
+import com.asalariado.app.ui.LockScreen
+import kotlinx.coroutines.Dispatchers
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -58,19 +62,66 @@ import com.asalariado.app.ui.ImportScreen
 import com.asalariado.app.ui.MedicalScreen
 import com.asalariado.app.ui.PayrollScreen
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val vm: AppViewModel by viewModels()
+
+    /** La app está bloqueada hasta que se pone la huella o el PIN del móvil. */
+    private val locked = mutableStateOf(false)
+    private var stoppedAt = 0L
+    private var prompting = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        applySecureFlag()
         if (savedInstanceState == null) handleShare(intent)
         Scheduler.schedule(this)
-        setContent { App(vm) }
+        // Borra copias temporales de nóminas y cifra las que quedaran de versiones anteriores.
+        lifecycleScope.launch(Dispatchers.IO) { runCatching { SecureFiles.housekeeping(this@MainActivity) } }
+        if (AppLock.enabled(this)) locked.value = true
+        setContent {
+            val isLocked by locked
+            if (isLocked) {
+                val ui by vm.ui.collectAsState()
+                AsalariadoTheme(ui) { LockScreen(onUnlock = ::unlock) }
+            } else {
+                App(vm)
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Al volver tras un rato fuera, se vuelve a pedir el desbloqueo.
+        if (AppLock.enabled(this) && stoppedAt > 0 && System.currentTimeMillis() - stoppedAt > AppLock.RELOCK_AFTER_MS) {
+            locked.value = true
+        }
+        if (locked.value) unlock()
+    }
+
+    private fun unlock() {
+        if (prompting) return
+        if (!AppLock.available(this)) {
+            // Se quitó el bloqueo del móvil: no se puede comprobar, así que no se deja la app cerrada para siempre.
+            locked.value = false
+            return
+        }
+        prompting = true
+        AppLock.authenticate(this, onSuccess = { prompting = false; locked.value = false }, onFail = { prompting = false })
+    }
+
+    /** Pide la huella o el PIN para activar el bloqueo (así se comprueba que funciona). */
+    fun confirmLock(onOk: () -> Unit) = AppLock.authenticate(this, onSuccess = onOk)
+
+    /** Oculta el contenido en las apps recientes si se ha pedido (también impide hacer capturas). */
+    fun applySecureFlag() {
+        if (AppLock.hideInRecents(this)) window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
     }
 
     override fun onStop() {
         super.onStop()
+        stoppedAt = System.currentTimeMillis()
         // Al salir de la app se refresca el widget con los últimos cambios.
         lifecycleScope.launch { runCatching { ShiftWidget().updateAll(this@MainActivity) } }
     }
