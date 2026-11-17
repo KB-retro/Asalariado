@@ -38,7 +38,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Recorta el código y los recursos que no se usan (iconos, partes de Compose y librerías).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Sólo procesadores de móvil (no los de emuladores de PC).
+            ndk { abiFilters += setOf("arm64-v8a", "armeabi-v7a") }
             signingConfig = if (keystoreFile != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
@@ -79,8 +84,8 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // OCR en el propio móvil (modelo incluido, funciona sin conexión).
-    implementation("com.google.mlkit:text-recognition:16.0.1")
+    // OCR en el móvil con el modelo de Google Play Services (no va dentro del APK; se descarga una vez).
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
 
     // Leer nóminas en PDF (también con contraseña) sin OCR.
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
