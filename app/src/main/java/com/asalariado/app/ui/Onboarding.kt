@@ -43,7 +43,8 @@ fun OnboardingCard(steps: List<Step>) {
     if (hidden || done == steps.size) return
     SectionCard("Primeros pasos · $done de ${steps.size}") {
         LinearProgressIndicator(progress = { done.toFloat() / steps.size }, modifier = Modifier.fillMaxWidth())
-        steps.forEach { s ->
+        // Sólo los pasos que faltan, para que ocupe poco.
+        steps.filter { !it.done }.forEach { s ->
             Row(
                 Modifier.fillMaxWidth().clickable(enabled = !s.done, onClick = s.action).padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
