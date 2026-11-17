@@ -99,6 +99,7 @@ fun CalendarScreen(
     stoppages: List<Stoppage>,
     c: Conditions,
     onImport: () -> Unit,
+    onboarding: @Composable () -> Unit = {},
 ) {
     var ymText by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     val ym = YearMonth.parse(ymText)
@@ -125,6 +126,7 @@ fun CalendarScreen(
                 IconButton(onClick = { rotationOpen = true }) { Icon(Icons.Default.Autorenew, contentDescription = "Rotación de turnos") }
                 FilledTonalIconButton(onClick = onImport) { Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Importar") }
             }
+            onboarding()
             TodayHero(days, calendar, c)
             if (c.rotationAnchor == null) RotationBanner(onPick = { vm.startRotationFrom(LocalDate.now(), it) })
 

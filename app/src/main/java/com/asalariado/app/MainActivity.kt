@@ -34,6 +34,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import com.asalariado.app.ui.SettingsScreen
+import com.asalariado.app.ui.OnboardingCard
+import com.asalariado.app.ui.Step
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -173,7 +175,26 @@ private fun App(vm: AppViewModel) {
                         label = "tabs",
                     ) { t ->
                         when (Tab.entries[t]) {
-                            Tab.Calendar -> CalendarScreen(vm, days, calendar, medical, stoppages, conditions, onImport = { importing = true })
+                            Tab.Calendar -> CalendarScreen(
+                                vm, days, calendar, medical, stoppages, conditions, onImport = { importing = true },
+                                onboarding = {
+                                    val pass by vm.payslipPassword.collectAsState()
+                                    OnboardingCard(
+                                        listOf(
+                                            Step("Elige tu escalón", "En Contrato: rellena jornal, prima y precios de la tabla.",
+                                                conditions.escalon != null) { tab = Tab.Conditions.ordinal },
+                                            Step("Importa el calendario laboral del año", "El PDF del convenio: festivos, vacaciones, días de 6 h…",
+                                                calendar.isNotEmpty()) { importing = true },
+                                            Step("Marca tu turno de esta semana", "Con los botones Mañana / Tarde de aquí abajo; las siguientes se alternan solas.",
+                                                conditions.rotationAnchor != null) {},
+                                            Step("Pon la contraseña de las nóminas", "En Ajustes, si os las mandan en PDF con contraseña.",
+                                                pass != null) { tab = Tab.Settings.ordinal },
+                                            Step("Importa tu última nómina", "En Nómina: así se ajusta el IRPF y se comprueba que cuadra.",
+                                                payslips.isNotEmpty()) { tab = Tab.Payroll.ordinal },
+                                        ),
+                                    )
+                                },
+                            )
                             Tab.Medical -> MedicalScreen(vm, medical, conditions)
                             Tab.Payroll -> PayrollScreen(vm, days, calendar, medical, payslips, extraPayslips, stoppages, conditions, vm::savePayslip)
                             Tab.Conditions -> ConditionsScreen(conditions, vm::saveConditions)
