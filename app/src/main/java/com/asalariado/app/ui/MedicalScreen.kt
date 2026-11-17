@@ -17,6 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.asalariado.app.AppViewModel
 import com.asalariado.core.Conditions
+import com.asalariado.core.MedicalKind
 import com.asalariado.core.MedicalVisit
 import java.time.LocalDate
 import java.time.LocalTime
@@ -45,8 +47,8 @@ fun MedicalScreen(vm: AppViewModel, medical: List<MedicalVisit>, c: Conditions) 
     var year by remember { mutableIntStateOf(LocalDate.now().year) }
     var editing by remember { mutableStateOf<MedicalVisit?>(null) }
     val list = medical.filter { it.date.year == year }
-    val used = list.sumOf { it.hours }
-    val justified = list.filter { it.justified }.sumOf { it.hours }
+    val used = list.filter { it.kind.limited }.sumOf { it.hours }
+    val specialist = list.filter { !it.kind.limited }.sumOf { it.hours }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -70,7 +72,7 @@ fun MedicalScreen(vm: AppViewModel, medical: List<MedicalVisit>, c: Conditions) 
                 }
             }
             item {
-                SectionCard("Bolsa anual") {
+                SectionCard("Médico general / acompañante") {
                     val allowed = c.medicalHoursPerYear
                     KeyValue("Usadas", "${hours(used)} de ${hours(allowed)}")
                     if (allowed > 0) LinearProgressIndicator(
@@ -79,7 +81,7 @@ fun MedicalScreen(vm: AppViewModel, medical: List<MedicalVisit>, c: Conditions) 
                         color = if (used > allowed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     )
                     KeyValue("Disponibles", hours((allowed - used).coerceAtLeast(0.0)))
-                    KeyValue("Con justificante (cuentan como trabajadas)", hours(justified))
+
                     if (used > allowed) Text(
                         "Has superado las horas del convenio en ${hours(used - allowed)}. Revisa si te las pueden descontar.",
                         color = MaterialTheme.colorScheme.error,
@@ -87,13 +89,28 @@ fun MedicalScreen(vm: AppViewModel, medical: List<MedicalVisit>, c: Conditions) 
                     )
                 }
             }
+            item {
+                SectionCard("Especialista (propio)") {
+                    KeyValue("Horas este año", hours(specialist))
+                    Text("Sin límite de horas.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (c.bonusPerHour > 0 && list.isNotEmpty()) item {
+                val all = list.sumOf { it.hours }
+                Text(
+                    "En las horas de médico (de cualquier tipo) no se cobra la prima: ${hours(all)} × ${money(c.bonusPerHour)} = " +
+                        "${money(all * c.bonusPerHour)} menos en las nóminas de este año (ya está en el cálculo).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (list.isEmpty()) item { Text("Aún no hay citas este año.", Modifier.padding(16.dp)) }
             items(list, key = { it.id }) { m ->
                 Card(onClick = { editing = m }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(m.date.format(dayFmt).replaceFirstChar { it.uppercase() }, fontWeight = FontWeight.Medium)
-                            Text("${m.start.hhmm()}–${m.end.hhmm()}" + if (m.reason.isNotBlank()) " · ${m.reason}" else "",
+                            Text("${m.kind.label} · ${m.start.hhmm()}–${m.end.hhmm()}" + if (m.reason.isNotBlank()) " · ${m.reason}" else "",
                                 style = MaterialTheme.typography.bodySmall)
                             if (!m.justified) Text("Sin justificante", style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.error)
@@ -119,11 +136,15 @@ private fun MedicalDialog(m: MedicalVisit, onDismiss: () -> Unit, onSave: (Medic
     var end by remember { mutableStateOf<LocalTime?>(m.end) }
     var reason by remember { mutableStateOf(m.reason) }
     var justified by remember { mutableStateOf(m.justified) }
+    var kind by remember { mutableStateOf(m.kind) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (m.id == 0L) "Nueva cita médica" else "Cita médica") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                MedicalKind.entries.forEach { k ->
+                    FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(k.label) })
+                }
                 DateButton(date, Modifier.fillMaxWidth(), "Fecha") { date = it }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TimeField("Desde", start, Modifier.weight(1f)) { start = it }
@@ -139,7 +160,7 @@ private fun MedicalDialog(m: MedicalVisit, onDismiss: () -> Unit, onSave: (Medic
         confirmButton = {
             TextButton(
                 enabled = start != null && end != null,
-                onClick = { onSave(m.copy(date = date, start = start!!, end = end!!, reason = reason, justified = justified)) },
+                onClick = { onSave(m.copy(date = date, start = start!!, end = end!!, reason = reason, justified = justified, kind = kind)) },
             ) { Text("Guardar") }
         },
         dismissButton = {

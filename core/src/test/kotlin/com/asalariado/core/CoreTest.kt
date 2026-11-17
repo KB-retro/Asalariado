@@ -42,7 +42,7 @@ class HoursTest {
 }
 
 class PayrollTest {
-    private val c = Conditions(grossAnnualSalary = 21000.0, payments = 14, irpfPercent = 10.0, ssPercent = 6.0, nightBonusPerHour = 2.0)
+    private val c = Conditions(baseMonthly = 1500.0, payments = 14, irpfPercent = 10.0, ssPercent = 6.0, nightBonusPerHour = 2.0)
 
     @Test
     fun extraPayInJune() {
@@ -50,7 +50,7 @@ class PayrollTest {
         val june = Payroll.month(YearMonth.of(2026, 6), emptyList(), emptyList(), c, null)
         assertEquals(1500.0, may.expectedGross, 0.001)
         assertEquals(3000.0, june.expectedGross, 0.001)
-        // SS sobre base prorrateada 1750
+        // SS sobre base con la extra prorrateada: 1500 + 250 = 1750
         assertEquals(105.0, june.ssDeduction, 0.001)
         assertEquals(3000.0 - 105.0 - 300.0, june.expectedNet, 0.001)
     }
@@ -75,11 +75,40 @@ class PayrollTest {
     fun yearOvertime() {
         val cc = c.copy(annualHours = 16.0)
         val days = (2..4).map { DayEntry(LocalDate.of(2026, 2, it), ShiftType.MORNING) }
-        val med = listOf(MedicalVisit(date = LocalDate.of(2026, 2, 5), start = LocalTime.of(9, 0), end = LocalTime.of(11, 0)))
+        val med = listOf(
+            MedicalVisit(date = LocalDate.of(2026, 2, 5), start = LocalTime.of(9, 0), end = LocalTime.of(11, 0)),
+            MedicalVisit(date = LocalDate.of(2026, 2, 6), start = LocalTime.of(9, 0), end = LocalTime.of(10, 0), kind = MedicalKind.SPECIALIST),
+        )
         val y = Payroll.year(2026, days, med, emptyList(), cc)
-        assertEquals(26.0, y.countedHours, 0.001)
-        assertEquals(10.0, y.overtimeHours, 0.001)
+        assertEquals(27.0, y.countedHours, 0.001)
+        assertEquals(11.0, y.overtimeHours, 0.001)
         assertEquals(2.0, y.medicalHoursUsed, 0.001)
+        assertEquals(1.0, y.specialistHours, 0.001)
+    }
+
+    /**
+     * Ejemplo con la tabla Bellota 2026, escalón 10: 8 h de sábado activable a 12,2194 €/h,
+     * 2 h sin prima, IRPF 17 %, SS 6,50 %, EPSV 2,30 %, seguro de vida 1,33 €.
+     */
+    @Test
+    fun escalon10Example() {
+        val cc = TablaSalarial.BELLOTA_2026.aplicar(Conditions(), 10).copy(
+            irpfPercent = 17.0, ssPercent = 6.5, geroaPercent = 2.3, employerMonthlyExtras = 1.33,
+            activablePricePerHour = 12.2194,
+        )
+        val d = LocalDate.of(2026, 10, 3)
+        val cal = mapOf(d to DayType.SABADO_FR)
+        val days = listOf(DayEntry(d, ShiftType.MORNING))
+        val med = listOf(MedicalVisit(date = LocalDate.of(2026, 10, 7), start = LocalTime.of(8, 0), end = LocalTime.of(10, 0)))
+        val m = Payroll.month(YearMonth.of(2026, 10), days, med, cc, null, cal)
+        assertEquals(97.76, m.activablePlus, 0.01)
+        assertEquals(10.12, m.bonusDiscount, 0.01)
+        assertEquals(2927.04, m.expectedGross, 0.01)
+        assertEquals(3352.75, m.ssBase, 0.01)
+        assertEquals(75.38, m.geroaDeduction, 0.01)
+        assertEquals(497.60, m.irpfDeduction, 0.01)
+        assertEquals(2136.13, m.expectedNet, 0.01)
+        assertEquals(2.77, cc.nightBonusPerHour, 0.001)
     }
 }
 

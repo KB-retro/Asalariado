@@ -23,12 +23,19 @@ data class MonthSummary(
     /** Horas que marca el calendario laboral para el mes (0 si no hay calendario). */
     val calendarHours: Double,
     val baseGross: Double,
+    /** Prima del mes y lo que se descuenta por horas de médico / libre disposición. */
+    val bonus: Double,
+    val unpaidBonusHours: Double,
+    val bonusDiscount: Double,
     val extraPay: Double,
     val nightPlus: Double,
     val holidayPlus: Double,
     val expectedGross: Double,
     val ssDeduction: Double,
     val irpfDeduction: Double,
+    val geroaDeduction: Double,
+    /** Base de cotización a la Seguridad Social. */
+    val ssBase: Double,
     val expectedNet: Double,
     val payslip: Payslip?,
 ) {
@@ -44,8 +51,10 @@ data class YearSummary(
     val months: List<MonthSummary>,
     val annualHours: Double,
     val countedHours: Double,
+    /** Horas de médico general / acompañante (con límite) y de especialista propio (sin límite). */
     val medicalHoursUsed: Double,
     val medicalHoursAllowed: Double,
+    val specialistHours: Double,
     val vacationUsed: Int,
     val vacationAllowed: Int,
     val personalUsed: Int,
@@ -86,12 +95,20 @@ object Payroll {
         val holidayHours = work.filter { it.holidayWorked }.sumOf { it.workedHours(c) }
         val medicalHours = med.sumOf { it.hours }
 
-        val prorate = c.payments <= 12 || c.proratedExtras
-        val payments = max(c.payments, 1)
-        val monthlyBase = if (prorate) c.grossAnnualSalary / 12.0 else c.grossAnnualSalary / payments
-        val extraCount = if (prorate) 0 else (payments - 12).coerceAtLeast(0)
-        val extraMonths = c.extraPayMonths.take(extraCount)
-        val extraPay = if (ym.monthValue in extraMonths) monthlyBase * extraMonths.count { it == ym.monthValue } else 0.0
+        val payments = max(c.payments, 12)
+        val extraCount = payments - 12
+        val prorate = extraCount == 0 || c.proratedExtras
+        // Paga extra prorrateada (para la base de cotización) y paga extra del mes, si toca.
+        val prorata = c.baseMonthly * extraCount / 12.0
+        val monthlyBase = if (prorate) c.baseMonthly + prorata else c.baseMonthly
+        val extraMonths = if (prorate) emptyList() else c.extraPayMonths.take(extraCount)
+        val extraPay = c.baseMonthly * extraMonths.count { it == ym.monthValue }
+
+        // La prima no se cobra en las horas de médico (cualquier tipo) ni en los días de libre disposición.
+        val allMedicalHours = medical.filter { YearMonth.from(it.date) == ym }.sumOf { it.hours }
+        val personalDays = inMonth.count { it.shift == ShiftType.PERSONAL }
+        val unpaidBonusHours = allMedicalHours + personalDays * c.normalDayHours
+        val bonusDiscount = unpaidBonusHours * c.bonusPerHour
 
         val nightPlus = nightHours * c.nightBonusPerHour
         val holidayPlus = holidayHours * c.holidayBonusPerHour
@@ -99,10 +116,14 @@ object Payroll {
         val activableHours = activable.sumOf { it.workedHours(c) }
         val activablePlus = activableHours * c.activablePricePerHour
         val calendarHours = calendar.filter { YearMonth.from(it.key) == ym }.values.sumOf { plannedHours(it, c) }
-        val gross = monthlyBase + extraPay + nightPlus + holidayPlus + activablePlus
+        val gross = monthlyBase + c.bonusMonthly - bonusDiscount + extraPay + nightPlus + holidayPlus + activablePlus
 
-        // La base de cotización incluye las pagas extra prorrateadas, no la paga extra del mes.
-        val ssBase = c.grossAnnualSalary / 12.0 + nightPlus + holidayPlus + activablePlus
+        // Base de cotización: lo devengado sin la paga extra del mes, más la prorrata de las extra,
+        // lo que paga la empresa (seguro…) y su aportación a la EPSV (igual a la del trabajador).
+        val g = c.geroaPercent / 100.0
+        val geroaBase = gross - extraPay + (if (prorate) 0.0 else prorata) + c.employerMonthlyExtras
+        val geroa = geroaBase * g
+        val ssBase = geroaBase * (1 + g)
         val ss = ssBase * c.ssPercent / 100.0
         val irpf = gross * c.irpfPercent / 100.0
 
@@ -115,7 +136,7 @@ object Payroll {
             holidayHours = holidayHours,
             medicalHours = medicalHours,
             vacationDays = inMonth.count { it.shift == ShiftType.VACATION },
-            personalDays = inMonth.count { it.shift == ShiftType.PERSONAL },
+            personalDays = personalDays,
             sickDays = inMonth.count { it.shift == ShiftType.SICK },
             shiftCounts = inMonth.groupingBy { it.shift }.eachCount(),
             activableDays = activable.size,
@@ -123,13 +144,18 @@ object Payroll {
             activablePlus = activablePlus,
             calendarHours = calendarHours,
             baseGross = monthlyBase,
+            bonus = c.bonusMonthly,
+            unpaidBonusHours = unpaidBonusHours,
+            bonusDiscount = bonusDiscount,
             extraPay = extraPay,
             nightPlus = nightPlus,
             holidayPlus = holidayPlus,
             expectedGross = gross,
             ssDeduction = ss,
             irpfDeduction = irpf,
-            expectedNet = gross - ss - irpf,
+            geroaDeduction = geroa,
+            ssBase = ssBase,
+            expectedNet = gross - ss - irpf - geroa,
             payslip = payslip,
         )
     }
@@ -156,7 +182,8 @@ object Payroll {
             months = months,
             annualHours = c.annualHours,
             countedHours = counted,
-            medicalHoursUsed = yMed.sumOf { it.hours },
+            medicalHoursUsed = yMed.filter { it.kind.limited }.sumOf { it.hours },
+            specialistHours = yMed.filter { !it.kind.limited }.sumOf { it.hours },
             medicalHoursAllowed = c.medicalHoursPerYear,
             vacationUsed = months.sumOf { it.vacationDays },
             vacationAllowed = c.vacationDays,

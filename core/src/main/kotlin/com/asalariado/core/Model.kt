@@ -57,6 +57,18 @@ data class DayEntry(
     val source: Source = Source.MANUAL,
 )
 
+/** Tipo de permiso médico. */
+enum class MedicalKind(val label: String, val limited: Boolean) {
+    /** Médico de cabecera / general o acompañar a un familiar: tiene bolsa anual de horas. */
+    COMMON("Médico general / acompañante", true),
+    /** Especialista para uno mismo: sin límite de horas. */
+    SPECIALIST("Especialista (propio)", false);
+
+    companion object {
+        fun fromName(name: String?): MedicalKind = entries.firstOrNull { it.name == name } ?: COMMON
+    }
+}
+
 data class MedicalVisit(
     val id: Long = 0,
     val date: LocalDate,
@@ -65,6 +77,7 @@ data class MedicalVisit(
     val reason: String = "",
     /** Con justificante: cuenta como tiempo de trabajo retribuido. */
     val justified: Boolean = true,
+    val kind: MedicalKind = MedicalKind.COMMON,
 ) {
     val hours: Double get() = hoursBetween(start, end)
 }
@@ -81,7 +94,18 @@ data class ShiftHours(val start: LocalTime, val end: LocalTime)
 
 /** Condiciones laborales anuales (contrato / convenio). */
 data class Conditions(
-    val grossAnnualSalary: Double = 18000.0,
+    /** Escalón salarial elegido de la tabla (null = importes puestos a mano). */
+    val escalon: Int? = null,
+    /** Salario base mensual (jornal). Las pagas extra son de este importe. */
+    val baseMonthly: Double = 1285.71,
+    /** Prima mensual (se cobra en 12 pagas, no en las extra). */
+    val bonusMonthly: Double = 0.0,
+    /** Prima por hora: se descuenta por cada hora de médico o de libre disposición. */
+    val bonusPerHour: Double = 0.0,
+    /** Aportación del trabajador a la EPSV (Geroa); la empresa aporta lo mismo. */
+    val geroaPercent: Double = 0.0,
+    /** Otros importes que paga la empresa y cotizan (p. ej. seguro de vida), al mes. */
+    val employerMonthlyExtras: Double = 0.0,
     val annualHours: Double = 1780.0,
     val payments: Int = 14,
     val extraPayMonths: List<Int> = listOf(6, 12),
@@ -95,10 +119,12 @@ data class Conditions(
     /** Precio de la hora extra; 0 = usar el precio hora ordinario. */
     val overtimePrice: Double = 0.0,
     val irpfPercent: Double = 12.0,
-    val ssPercent: Double = 6.48,
+    /** Contingencias comunes + desempleo y FP + MEI del trabajador. */
+    val ssPercent: Double = 6.50,
     val vacationDays: Int = 22,
     val personalDays: Int = 2,
-    val medicalHoursPerYear: Double = 20.0,
+    /** Bolsa anual de médico general / acompañante (el especialista propio no tiene límite). */
+    val medicalHoursPerYear: Double = 16.0,
     /** Horas de una jornada normal y de una jornada corta (días amarillos del calendario). */
     val normalDayHours: Double = 8.0,
     val shortDayHours: Double = 6.0,
@@ -111,6 +137,9 @@ data class Conditions(
     /** Lunes de una semana en la que se trabaja rotation[0]. */
     val rotationAnchor: LocalDate? = null,
 ) {
+    /** Bruto anual: jornal en todas las pagas + prima en 12. */
+    val grossAnnualSalary: Double get() = baseMonthly * maxOf(payments, 12) + bonusMonthly * 12
+
     val hourlyRate: Double get() = if (annualHours > 0) grossAnnualSalary / annualHours else 0.0
 
     fun hoursFor(shift: ShiftType): ShiftHours? = shiftHours[shift]

@@ -15,6 +15,9 @@ import com.asalariado.core.AnnualCalendarParser
 import com.asalariado.core.Conditions
 import com.asalariado.core.DayType
 import com.asalariado.core.Payroll
+import com.asalariado.core.PayslipData
+import com.asalariado.core.PayslipParser
+import com.asalariado.core.TablaSalarial
 import com.asalariado.core.DayEntry
 import com.asalariado.core.MedicalVisit
 import com.asalariado.core.ParsedDay
@@ -46,6 +49,13 @@ data class ImportState(
     val rawText: String = "",
     val year: Int = LocalDate.now().year,
     val month: Int = LocalDate.now().monthValue,
+)
+
+/** Nómina leída de un PDF o imagen, pendiente de confirmar. */
+data class PayslipImport(
+    val loading: Boolean = false,
+    val data: PayslipData? = null,
+    val error: String? = null,
 )
 
 data class ImportRow(val day: ParsedDay, val include: Boolean = true)
@@ -117,6 +127,97 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val toSave = Rotation.merge(existing, Rotation.generate(from, to, c, calendar.value), overwrite)
             dao.upsertDays(toSave.map { it.toEntity() })
         }
+
+    // ---- Rotación semanal ----
+
+    /**
+     * «Esta semana estoy de [shift]»: fija la rotación a partir de esta semana alternando
+     * (mañana, tarde, mañana…) y rellena hasta final de año (o hasta donde llegue el calendario laboral).
+     * Respeta vacaciones, bajas y días cambiados a mano de otras semanas.
+     */
+    fun startRotationFrom(anyDay: LocalDate, shift: ShiftType) = viewModelScope.launch {
+        val monday = Rotation.mondayOf(anyDay)
+        val cycle = conditions.value.rotation.takeIf { shift in it && it.size >= 2 }
+            ?: listOf(ShiftType.MORNING, ShiftType.AFTERNOON).takeIf { shift in it }
+            ?: listOf(shift)
+        val idx = cycle.indexOf(shift)
+        val rotated = cycle.drop(idx) + cycle.take(idx)
+        val c = conditions.value.copy(rotation = rotated, rotationAnchor = monday)
+        store.save(c)
+        val cal = calendar.value
+        val to = maxOf(LocalDate.of(monday.year, 12, 31), cal.keys.maxOrNull() ?: monday)
+        val existing = dao.daysBetween(monday.toEpochDay(), to.toEpochDay()).map { it.toModel() }.associateBy { it.date }
+        val generated = Rotation.generate(monday, to, c, cal)
+        val weekEnd = monday.plusDays(6)
+        val toSave = generated.filter { g ->
+            val e = existing[g.date] ?: return@filter true
+            if (!g.date.isAfter(weekEnd)) {
+                // En la semana marcada manda lo que dices, salvo vacaciones, bajas o permisos apuntados.
+                e.shift.isWork || e.shift == ShiftType.OFF || e.source == Source.PATTERN
+            } else {
+                e.source == Source.PATTERN
+            }
+        }
+        dao.upsertDays(toSave.map { it.toEntity() })
+    }
+
+    /** Cambia sólo esta semana (mañana ↔ tarde) por alguna circunstancia; el resto sigue la rotación. */
+    fun swapWeek(anyDay: LocalDate) = viewModelScope.launch {
+        val monday = Rotation.mondayOf(anyDay)
+        val c = conditions.value
+        val cal = calendar.value
+        val existing = days.value
+        val list = (0L..6L).map { monday.plusDays(it) }.mapNotNull { d ->
+            val e = existing[d] ?: return@mapNotNull null
+            val other = when (e.shift) {
+                ShiftType.MORNING -> ShiftType.AFTERNOON
+                ShiftType.AFTERNOON -> ShiftType.MORNING
+                else -> return@mapNotNull null
+            }
+            Rotation.plannedDay(d, other, c, cal[d]).copy(note = e.note, holidayWorked = e.holidayWorked, source = Source.MANUAL)
+        }
+        dao.upsertDays(list.map { it.toEntity() })
+    }
+
+    // ---- Nóminas ----
+
+    val payslipImport = MutableStateFlow(PayslipImport())
+
+    fun readPayslip(uri: Uri) = viewModelScope.launch {
+        payslipImport.value = PayslipImport(loading = true)
+        payslipImport.value = try {
+            val pages = Ocr.recognize(getApplication(), uri)
+            val data = PayslipParser.parse(pages.flatMap { it.lines })
+            if (data.isUseful) PayslipImport(data = data)
+            else PayslipImport(error = "No he encontrado los importes de la nómina (total devengos, líquido…).")
+        } catch (e: Exception) {
+            PayslipImport(error = "No se pudo leer la nómina: ${e.message}")
+        }
+    }
+
+    fun clearPayslipImport() { payslipImport.value = PayslipImport() }
+
+    /** Guarda la nómina leída y, si se pide, actualiza las condiciones con sus datos. */
+    fun commitPayslip(year: Int, month: Int, updateConditions: Boolean) = viewModelScope.launch {
+        val p = payslipImport.value.data ?: return@launch
+        dao.savePayslip(Payslip(year, month, p.totalDevengos, p.liquido, "Importada").toEntity())
+        if (updateConditions) {
+            var c = conditions.value
+            p.escalon?.let { e -> if (TablaSalarial.BELLOTA_2026.escalon(e) != null) c = TablaSalarial.BELLOTA_2026.aplicar(c, e) }
+            c = c.copy(
+                baseMonthly = p.jornal ?: c.baseMonthly,
+                bonusMonthly = p.prima ?: c.bonusMonthly,
+                bonusPerHour = p.bonusHourPrice ?: c.bonusPerHour,
+                activablePricePerHour = p.activablePrice ?: c.activablePricePerHour,
+                irpfPercent = p.irpfPercent ?: c.irpfPercent,
+                ssPercent = p.ssPercent ?: c.ssPercent,
+                geroaPercent = p.geroaPercent ?: c.geroaPercent,
+                employerMonthlyExtras = p.seguroVida ?: c.employerMonthlyExtras,
+            )
+            store.save(c)
+        }
+        clearPayslipImport()
+    }
 
     /** Cambia a mano el tipo de un día del calendario laboral (null = quitarlo). */
     fun setCalendarType(date: LocalDate, type: DayType?) = viewModelScope.launch {

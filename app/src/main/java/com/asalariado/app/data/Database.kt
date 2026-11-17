@@ -14,6 +14,7 @@ import androidx.room.Upsert
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.asalariado.core.DayEntry
+import com.asalariado.core.MedicalKind
 import com.asalariado.core.MedicalVisit
 import com.asalariado.core.Payslip
 import com.asalariado.core.ShiftType
@@ -41,6 +42,7 @@ data class MedicalEntity(
     val endMin: Int,
     val reason: String,
     val justified: Boolean,
+    @androidx.room.ColumnInfo(defaultValue = "COMMON") val kind: String = "COMMON",
 )
 
 @Entity(tableName = "payslips", primaryKeys = ["year", "month"])
@@ -82,8 +84,9 @@ fun DayEntry.toEntity() = DayEntity(
     source = source.name,
 )
 
-fun MedicalEntity.toModel() = MedicalVisit(id, LocalDate.ofEpochDay(epochDay), startMin.toTime(), endMin.toTime(), reason, justified)
-fun MedicalVisit.toEntity() = MedicalEntity(id, date.toEpochDay(), start.toMin(), end.toMin(), reason, justified)
+fun MedicalEntity.toModel() =
+    MedicalVisit(id, LocalDate.ofEpochDay(epochDay), startMin.toTime(), endMin.toTime(), reason, justified, MedicalKind.fromName(kind))
+fun MedicalVisit.toEntity() = MedicalEntity(id, date.toEpochDay(), start.toMin(), end.toMin(), reason, justified, kind.name)
 fun PayslipEntity.toModel() = Payslip(year, month, gross, net, note)
 fun Payslip.toEntity() = PayslipEntity(year, month, gross, net, note)
 
@@ -131,7 +134,7 @@ interface AppDao {
 
 @Database(
     entities = [DayEntity::class, MedicalEntity::class, PayslipEntity::class, CalendarDayEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -146,10 +149,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `medical` ADD COLUMN `kind` TEXT NOT NULL DEFAULT 'COMMON'")
+            }
+        }
+
         @Volatile private var instance: AppDatabase? = null
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "asalariado.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { instance = it }
         }
     }

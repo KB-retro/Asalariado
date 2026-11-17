@@ -28,6 +28,10 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -127,12 +131,19 @@ fun CalendarScreen(
                 Text("Ir a hoy")
             }
 
-            MonthGrid(ym, days, calendar, medicalDates, onDay = { editing = it }, onWeek = { d, s -> vm.setWeek(d, s) })
+            if (c.rotationAnchor == null) RotationBanner(onPick = { vm.startRotationFrom(LocalDate.now(), it) })
+            MonthGrid(ym, days, calendar, medicalDates, onDay = { editing = it },
+                actions = WeekActions(
+                    startFrom = { d, s -> vm.startRotationFrom(d, s) },
+                    swap = { vm.swapWeek(it) },
+                    set = { d, s -> vm.setWeek(d, s) },
+                ),
+            )
             Legend(showDayTypes = calendar.isNotEmpty())
             MonthSummaryCard(ym, days, calendar, medical, c)
             Text(
-                "Toca la columna «Sem» para marcar una semana entera de mañana o de tarde, " +
-                    "y un día para cambiarlo (vacaciones, horario distinto, festivo…).",
+                "Toca la columna «Sem» para decir «esta semana estoy de mañana» (las siguientes se alternan solas) " +
+                    "o para cambiar sólo esa semana. Toca un día para cambiarlo (vacaciones, horario distinto, festivo…).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -160,6 +171,13 @@ fun CalendarScreen(
     }
 }
 
+/** Acciones del menú de cada semana. */
+private class WeekActions(
+    val startFrom: (LocalDate, ShiftType) -> Unit,
+    val swap: (LocalDate) -> Unit,
+    val set: (LocalDate, ShiftType) -> Unit,
+)
+
 private val weekdayHeaders = listOf("L", "M", "X", "J", "V", "S", "D")
 
 @Composable
@@ -169,7 +187,7 @@ private fun MonthGrid(
     calendar: Map<LocalDate, DayType>,
     medicalDates: Set<LocalDate>,
     onDay: (LocalDate) -> Unit,
-    onWeek: (LocalDate, ShiftType) -> Unit,
+    actions: WeekActions,
 ) {
     val first = Rotation.mondayOf(ym.atDay(1))
     val weeks = generateSequence(first) { it.plusWeeks(1) }.takeWhile { !it.isAfter(ym.atEndOfMonth()) }.toList()
@@ -184,7 +202,7 @@ private fun MonthGrid(
         }
         weeks.forEach { monday ->
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                WeekChip(monday, days, onWeek)
+                WeekChip(monday, days, actions)
                 (0L..6L).forEach { i ->
                     val d = monday.plusDays(i)
                     DayCell(
@@ -204,7 +222,7 @@ private fun MonthGrid(
 }
 
 @Composable
-private fun WeekChip(monday: LocalDate, days: Map<LocalDate, DayEntry>, onWeek: (LocalDate, ShiftType) -> Unit) {
+private fun WeekChip(monday: LocalDate, days: Map<LocalDate, DayEntry>, actions: WeekActions) {
     var menu by remember { mutableStateOf(false) }
     val dominant = (0L..6L).mapNotNull { days[monday.plusDays(it)]?.shift }.filter { it.isWork }
         .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
@@ -228,8 +246,21 @@ private fun WeekChip(monday: LocalDate, days: Map<LocalDate, DayEntry>, onWeek: 
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             )
-            listOf(ShiftType.MORNING, ShiftType.AFTERNOON, ShiftType.NIGHT, ShiftType.SPLIT, ShiftType.VACATION).forEach { s ->
-                DropdownMenuItem(text = { Text("Toda la semana: ${s.label}") }, onClick = { onWeek(monday, s); menu = false })
+            DropdownMenuItem(
+                text = { Text("Esta semana estoy de mañana (y alternar)") },
+                onClick = { actions.startFrom(monday, ShiftType.MORNING); menu = false },
+            )
+            DropdownMenuItem(
+                text = { Text("Esta semana estoy de tarde (y alternar)") },
+                onClick = { actions.startFrom(monday, ShiftType.AFTERNOON); menu = false },
+            )
+            DropdownMenuItem(
+                text = { Text("Cambiar sólo esta semana (mañana ↔ tarde)") },
+                onClick = { actions.swap(monday); menu = false },
+            )
+            HorizontalDivider()
+            listOf(ShiftType.NIGHT, ShiftType.SPLIT, ShiftType.VACATION).forEach { s ->
+                DropdownMenuItem(text = { Text("Sólo esta semana: ${s.label}") }, onClick = { actions.set(monday, s); menu = false })
             }
         }
     }
@@ -278,6 +309,23 @@ private fun DayCell(
         }
         if (hasMedical) {
             Box(Modifier.align(Alignment.TopEnd).size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error))
+        }
+    }
+}
+
+@Composable
+private fun RotationBanner(onPick: (ShiftType) -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("¿De qué turno estás esta semana?", fontWeight = FontWeight.SemiBold)
+            Text(
+                "Las semanas siguientes se alternarán solas (mañana, tarde, mañana…) respetando festivos y vacaciones.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { onPick(ShiftType.MORNING) }) { Text("Mañana") }
+                Button(onClick = { onPick(ShiftType.AFTERNOON) }) { Text("Tarde") }
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.asalariado.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -14,6 +15,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import com.asalariado.core.Conditions
 import com.asalariado.core.ShiftHours
 import com.asalariado.core.ShiftType
+import com.asalariado.core.TablaSalarial
 import java.time.DayOfWeek
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -50,7 +55,26 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
         )
 
         SectionCard("Salario") {
-            NumberField("Salario bruto anual", d.grossAnnualSalary, Modifier.fillMaxWidth(), "€") { d = d.copy(grossAnnualSalary = it) }
+            EscalonPicker(d.escalon) { n ->
+                d = if (n == null) d.copy(escalon = null) else TablaSalarial.BELLOTA_2026.aplicar(d, n)
+            }
+            Text(
+                "El escalón es tu nivel salarial dentro de la categoría (en la nómina: «ESCALÓN 10»). " +
+                    "Al elegirlo se rellenan jornal, prima, prima por hora, nocturnidad (20 % del salario hora) y jornada de 1592 h.",
+                style = MaterialTheme.typography.labelSmall,
+            )
+            NumberField("Jornal / salario base mensual", d.baseMonthly, Modifier.fillMaxWidth(), "€") {
+                d = d.copy(baseMonthly = it, escalon = null)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumberField("Prima mensual", d.bonusMonthly, Modifier.weight(1f), "€") { d = d.copy(bonusMonthly = it, escalon = null) }
+                NumberField("Prima por hora", d.bonusPerHour, Modifier.weight(1f), "€") { d = d.copy(bonusPerHour = it, escalon = null) }
+            }
+            Text(
+                "La prima por hora se descuenta en las horas de médico (de cualquier tipo) y en los días de libre disposición.",
+                style = MaterialTheme.typography.labelSmall,
+            )
+            KeyValue("Bruto anual (jornal × pagas + prima × 12)", money(d.grossAnnualSalary))
             Text("Número de pagas", style = MaterialTheme.typography.labelLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(12, 14, 15).forEach { p ->
@@ -78,8 +102,13 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
                 NumberField("IRPF", d.irpfPercent, Modifier.weight(1f), "%") { d = d.copy(irpfPercent = it) }
                 NumberField("Seg. Social", d.ssPercent, Modifier.weight(1f), "%") { d = d.copy(ssPercent = it) }
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumberField("EPSV (Geroa)", d.geroaPercent, Modifier.weight(1f), "%") { d = d.copy(geroaPercent = it) }
+                NumberField("Seguro vida (empresa)", d.employerMonthlyExtras, Modifier.weight(1f), "€") { d = d.copy(employerMonthlyExtras = it) }
+            }
             Text(
-                "El IRPF lo ves en tu nómina. Seguridad Social del trabajador en 2026 ≈ 6,48 % (contingencias comunes, desempleo, FP y MEI).",
+                "Todo esto viene en la nómina: IRPF; Seguridad Social = contingencias comunes 4,70 + desempleo y FP 1,65 + MEI 0,15 = 6,50 %. " +
+                    "Si importas una nómina desde la pestaña Nómina se rellenan solos.",
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -132,13 +161,32 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
                 NumberField("Vacaciones", d.vacationDays.toDouble(), Modifier.weight(1f), "días") { d = d.copy(vacationDays = it.toInt()) }
                 NumberField("Libre disposición", d.personalDays.toDouble(), Modifier.weight(1f), "días") { d = d.copy(personalDays = it.toInt()) }
             }
-            NumberField("Horas de médico al año", d.medicalHoursPerYear, Modifier.fillMaxWidth(), "h") { d = d.copy(medicalHoursPerYear = it) }
+            NumberField("Médico general / acompañante al año", d.medicalHoursPerYear, Modifier.fillMaxWidth(), "h") { d = d.copy(medicalHoursPerYear = it) }
         }
 
         Button(onClick = { onSave(d) }, enabled = changed, modifier = Modifier.fillMaxWidth()) {
             Text(if (changed) "Guardar condiciones" else "Guardado")
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun EscalonPicker(selected: Int?, onSelect: (Int?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
+            Text(selected?.let { "Escalón $it · tabla Bellota 2026" } ?: "Elegir escalón (tabla Bellota 2026)")
+        }
+        DropdownMenu(open, { open = false }) {
+            TablaSalarial.BELLOTA_2026.escalones.forEach { e ->
+                DropdownMenuItem(
+                    text = { Text("Escalón ${e.numero}: ${money(e.salarioMes)} + prima ${money(e.primaMes)}") },
+                    onClick = { onSelect(e.numero); open = false },
+                )
+            }
+            DropdownMenuItem(text = { Text("Importes a mano") }, onClick = { onSelect(null); open = false })
+        }
     }
 }
 

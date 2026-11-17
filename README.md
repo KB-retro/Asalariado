@@ -24,7 +24,14 @@ App Android para llevar el control de tus **turnos, horas y salario** y comproba
   y la rotación de mañana/tarde respeta festivos, vacaciones y jornadas cortas.
   Si te activan un sábado o festivo recuperable, lo marcas con su turno (8 h): cuenta como activable
   (máximo obligatorio configurable, 5 por defecto) y se paga al precio de sábado.
-- **Médico**: apunta citas con hora de inicio y fin, si tienes justificante, y ves las horas usadas frente a la bolsa anual.
+- **Rotación sencilla**: en la columna «Sem» dices «esta semana estoy de mañana» (o de tarde) y las siguientes
+  se alternan solas hasta fin de año; «Cambiar sólo esta semana» invierte mañana/tarde de esa semana sin tocar el resto.
+- **Médico**: médico general / acompañante (bolsa anual, 16 h por defecto) y especialista propio (sin límite).
+  En las horas de médico y los días de libre disposición no se cobra la prima: se descuenta a precio de prima por hora.
+- **Escalones**: tabla salarial Bellota 2026 (escalones 9–21): al elegir el escalón se rellenan jornal, prima,
+  prima por hora y nocturnidad.
+- **Importar nómina** (PDF o captura): lee periodo, escalón, jornal, prima, plus de sábados, descuentos de prima,
+  devengos, IRPF, SS, Geroa y líquido; la compara con lo esperado y puede actualizar tus condiciones.
 - **Nómina**: para cada mes calcula el bruto esperado (con pagas extra, plus de nocturnidad y festivos)
   y un neto aproximado (IRPF y Seguridad Social). Apuntas lo que pone tu nómina y te marca la diferencia.
   El resumen anual compara las horas del calendario con las horas de convenio y avisa del exceso de jornada.

@@ -30,7 +30,12 @@ class ConditionsStore(context: Context) {
         private const val KEY = "conditions_v1"
 
         fun toJson(c: Conditions): JSONObject = JSONObject().apply {
-            put("grossAnnualSalary", c.grossAnnualSalary)
+            c.escalon?.let { put("escalon", it) }
+            put("baseMonthly", c.baseMonthly)
+            put("bonusMonthly", c.bonusMonthly)
+            put("bonusPerHour", c.bonusPerHour)
+            put("geroaPercent", c.geroaPercent)
+            put("employerMonthlyExtras", c.employerMonthlyExtras)
             put("annualHours", c.annualHours)
             put("payments", c.payments)
             put("extraPayMonths", JSONArray(c.extraPayMonths))
@@ -64,8 +69,21 @@ class ConditionsStore(context: Context) {
                     runCatching { ShiftType.valueOf(k) to ShiftHours(LocalTime.parse(parts[0]), LocalTime.parse(parts[1])) }.getOrNull()
                 }.toMap()
             } ?: d.shiftHours
+            // Versiones anteriores guardaban sólo el bruto anual.
+            val payments = o.optInt("payments", d.payments).coerceAtLeast(12)
+            val oldGross = o.optDouble("grossAnnualSalary", Double.NaN)
+            val base = when {
+                o.has("baseMonthly") -> o.optDouble("baseMonthly", d.baseMonthly)
+                !oldGross.isNaN() -> oldGross / payments
+                else -> d.baseMonthly
+            }
             return Conditions(
-                grossAnnualSalary = o.optDouble("grossAnnualSalary", d.grossAnnualSalary),
+                escalon = if (o.has("escalon")) o.optInt("escalon") else null,
+                baseMonthly = base,
+                bonusMonthly = o.optDouble("bonusMonthly", d.bonusMonthly),
+                bonusPerHour = o.optDouble("bonusPerHour", d.bonusPerHour),
+                geroaPercent = o.optDouble("geroaPercent", d.geroaPercent),
+                employerMonthlyExtras = o.optDouble("employerMonthlyExtras", d.employerMonthlyExtras),
                 annualHours = o.optDouble("annualHours", d.annualHours),
                 payments = o.optInt("payments", d.payments),
                 extraPayMonths = o.optJSONArray("extraPayMonths")?.let { a -> (0 until a.length()).map { a.getInt(it) } } ?: d.extraPayMonths,

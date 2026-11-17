@@ -116,7 +116,7 @@ private fun App(vm: AppViewModel) {
             when (Tab.entries[tab]) {
                 Tab.Calendar -> CalendarScreen(vm, days, calendar, medical, conditions, onImport = { importing = true })
                 Tab.Medical -> MedicalScreen(vm, medical, conditions)
-                Tab.Payroll -> PayrollScreen(days, calendar, medical, payslips, conditions, vm::savePayslip)
+                Tab.Payroll -> PayrollScreen(vm, days, calendar, medical, payslips, conditions, vm::savePayslip)
                 Tab.Conditions -> ConditionsScreen(conditions, vm::saveConditions)
             }
         }

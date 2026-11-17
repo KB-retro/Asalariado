@@ -29,7 +29,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.collectAsState
+import com.asalariado.app.AppViewModel
+import com.asalariado.app.PayslipImport
 import com.asalariado.core.Conditions
+import java.time.YearMonth
 import com.asalariado.core.DayEntry
 import com.asalariado.core.DayType
 import com.asalariado.core.MedicalVisit
@@ -51,6 +61,7 @@ private fun diffColor(d: Double?): Color = when {
 
 @Composable
 fun PayrollScreen(
+    vm: AppViewModel,
     days: Map<LocalDate, DayEntry>,
     calendar: Map<LocalDate, DayType>,
     medical: List<MedicalVisit>,
@@ -138,11 +149,27 @@ fun PayrollScreen(
                 )
             }
         }
+        item {
+            val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null) vm.readPayslip(uri)
+            }
+            Button(onClick = { picker.launch(arrayOf("application/pdf", "image/*")) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Importar nómina (PDF o captura)")
+            }
+        }
         items(y.months, key = { it.month }) { m -> MonthRow(m) { editing = m } }
         item { Spacer(Modifier.height(24.dp)) }
     }
 
     editing?.let { m -> PayslipDialog(m, onDismiss = { editing = null }) { onSavePayslip(it); editing = null } }
+
+    val imp by vm.payslipImport.collectAsState()
+    if (imp.loading || imp.error != null || imp.data != null) {
+        PayslipImportDialog(imp, days, calendar, medical, c, onDismiss = vm::clearPayslipImport) { yy, mm, update ->
+            vm.commitPayslip(yy, mm, update)
+            year = yy
+        }
+    }
 }
 
 @Composable
@@ -153,6 +180,9 @@ private fun MonthRow(m: MonthSummary, onClick: () -> Unit) {
                 Text(monthName(m.month), fontWeight = FontWeight.SemiBold)
                 Text(hours(m.countedHours), style = MaterialTheme.typography.bodySmall)
             }
+            KeyValue("Jornal", money(m.baseGross))
+            if (m.bonus > 0) KeyValue("Prima", money(m.bonus))
+            if (m.bonusDiscount > 0) KeyValue("  sin prima ${hours(m.unpaidBonusHours)} (médico / libre disp.)", "−" + money(m.bonusDiscount))
             KeyValue("Bruto esperado", money(m.expectedGross))
             if (m.extraPay > 0) KeyValue("  incluye paga extra", money(m.extraPay))
             if (m.nightPlus > 0) KeyValue("  plus nocturnidad", money(m.nightPlus))
@@ -169,6 +199,87 @@ private fun MonthRow(m: MonthSummary, onClick: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun PayslipImportDialog(
+    imp: PayslipImport,
+    days: Map<LocalDate, DayEntry>,
+    calendar: Map<LocalDate, DayType>,
+    medical: List<MedicalVisit>,
+    c: Conditions,
+    onDismiss: () -> Unit,
+    onSave: (year: Int, month: Int, updateConditions: Boolean) -> Unit,
+) {
+    val p = imp.data
+    var year by remember(p) { mutableIntStateOf(p?.year ?: LocalDate.now().year) }
+    var month by remember(p) { mutableIntStateOf(p?.month ?: LocalDate.now().monthValue) }
+    var update by remember(p) { mutableStateOf(true) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nómina importada") },
+        text = {
+            when {
+                imp.loading -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                imp.error != null -> Text(imp.error!!, color = MaterialTheme.colorScheme.error)
+                p != null -> LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    item { MonthSelector(year, month) { y, m -> year = y; month = m } }
+                    item {
+                        val exp = Payroll.month(YearMonth.of(year, month), days.values, medical, c, null, calendar)
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            p.escalon?.let { KeyValue("Escalón", "$it") }
+                            p.jornal?.let { KeyValue("Jornal", money(it)) }
+                            p.prima?.let { KeyValue("Prima", money(it)) }
+                            val actH = p.activableHours
+                            val dtoH = p.bonusDiscountHours
+                            if (actH != null) KeyValue(
+                                "Plus sábados y FR", "${num(actH)} h × ${money(p.activablePrice)} = ${money(p.activableAmount)}",
+                            )
+                            if (dtoH != null && dtoH > 0) KeyValue(
+                                "Descuento de prima", "${num(dtoH)} h × ${money(p.bonusHourPrice)}",
+                            )
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            KeyValue("Total devengos", money(p.totalDevengos))
+                            KeyValue("Esperado por la app", money(exp.expectedGross))
+                            p.totalDevengos?.let { g ->
+                                val d = g - exp.expectedGross
+                                KeyValue("Diferencia bruto", money(d), diffColor(d))
+                            }
+                            KeyValue("Líquido a percibir", money(p.liquido))
+                            KeyValue("Neto esperado", money(exp.expectedNet))
+                            p.liquido?.let { n ->
+                                val d = n - exp.expectedNet
+                                KeyValue("Diferencia neto", money(d), diffColor(d))
+                            }
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            val pct = listOfNotNull(
+                                p.irpfPercent?.let { "IRPF ${num(it)} %" },
+                                p.ssPercent?.let { "SS ${num(it)} %" },
+                                p.geroaPercent?.let { "Geroa ${num(it)} %" },
+                            ).joinToString(" · ")
+                            if (pct.isNotEmpty()) Text(pct, style = MaterialTheme.typography.bodySmall)
+                            if (dtoH != null && abs(dtoH - exp.unpaidBonusHours) > 0.01) Text(
+                                "En la nómina se descuentan ${num(dtoH)} h de prima y en tu calendario hay " +
+                                    "${num(exp.unpaidBonusHours)} h de médico/libre disposición este mes. A veces se descuentan " +
+                                    "en la nómina del mes siguiente; si no, apúntalas en Médico.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(update, { update = it })
+                                Text("Actualizar mis condiciones (escalón, jornal, prima, IRPF, SS, Geroa, precio sábado)",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (p != null) TextButton(onClick = { onSave(year, month, update) }) { Text("Guardar nómina") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(if (p != null) "Cancelar" else "Cerrar") } },
+    )
 }
 
 @Composable

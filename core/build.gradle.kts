@@ -17,6 +17,6 @@ dependencies {
 
 tasks.test {
     // Permite probar con una captura real: ./gradlew :core:test -Dreal.image=... -Dreal.ocr=...
-    listOf("real.image", "real.ocr").forEach { k -> System.getProperty(k)?.let { systemProperty(k, it) } }
+    listOf("real.image", "real.ocr", "real.payslip").forEach { k -> System.getProperty(k)?.let { systemProperty(k, it) } }
     testLogging { showStandardStreams = true }
 }
