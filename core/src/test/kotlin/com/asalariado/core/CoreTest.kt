@@ -150,3 +150,29 @@ class ParserTest {
         assertEquals(ShiftType.NIGHT, ScheduleParser.classify(LocalTime.of(23, 0), Conditions()))
     }
 }
+
+class CalendarIntegrationTest {
+    @Test
+    fun rotationFollowsCalendarAndActivablesArePaid() {
+        val c = Conditions(rotationAnchor = LocalDate.of(2027, 1, 4), activablePricePerHour = 20.0)
+        val cal = mapOf(
+            LocalDate.of(2027, 1, 4) to DayType.LABORABLE,
+            LocalDate.of(2027, 1, 5) to DayType.JORNADA_CORTA,
+            LocalDate.of(2027, 1, 6) to DayType.FESTIVO,
+            LocalDate.of(2027, 1, 9) to DayType.SABADO_FR,
+        )
+        val days = Rotation.generate(LocalDate.of(2027, 1, 4), LocalDate.of(2027, 1, 9), c, cal).associateBy { it.date }
+        assertEquals(ShiftType.MORNING, days[LocalDate.of(2027, 1, 4)]!!.shift)
+        assertEquals(6.0, days[LocalDate.of(2027, 1, 5)]!!.workedHours(c))
+        assertEquals(ShiftType.HOLIDAY, days[LocalDate.of(2027, 1, 6)]!!.shift)
+        assertEquals(ShiftType.OFF, days[LocalDate.of(2027, 1, 9)]!!.shift)
+
+        // Te activan el sábado 9: 8 h pagadas como sábado.
+        val worked = days.values.map { if (it.date.dayOfMonth == 9) it.copy(shift = ShiftType.MORNING) else it }
+        val m = Payroll.month(YearMonth.of(2027, 1), worked, emptyList(), c, null, cal)
+        assertEquals(1, m.activableDays)
+        assertEquals(160.0, m.activablePlus, 0.001)
+        assertEquals(14.0, m.calendarHours, 0.001)
+        assertEquals(1, Payroll.year(2027, worked, emptyList(), emptyList(), c, cal).activableUsed)
+    }
+}

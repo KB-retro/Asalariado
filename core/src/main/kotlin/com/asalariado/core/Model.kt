@@ -22,6 +22,25 @@ enum class ShiftType(val code: String, val label: String, val isWork: Boolean) {
     }
 }
 
+/**
+ * Tipo de día según el calendario laboral anual (el de la empresa o el convenio),
+ * independiente del turno que hagas ese día.
+ */
+enum class DayType(val label: String, val code: String, val workDay: Boolean, val activable: Boolean) {
+    LABORABLE("Laborable", "", true, false),
+    JORNADA_CORTA("Jornada de 6 h", "6h", true, false),
+    ACTIVABLE_LABORABLE("Activable laborable", "AL", true, false),
+    FESTIVO("Domingo o festivo", "F", false, false),
+    SABADO_FR("Sábado / festivo recuperable", "S", false, true),
+    ACTIVABLE_FR("Activable F.R.", "FR", false, true),
+    PUENTE("Puente", "P", false, false),
+    VACACIONES("Vacaciones", "V", false, false);
+
+    companion object {
+        fun fromName(name: String?): DayType? = entries.firstOrNull { it.name == name }
+    }
+}
+
 /** Origen del dato de un día: generado por rotación, editado a mano o importado de una captura. */
 enum class Source { PATTERN, MANUAL, OCR }
 
@@ -79,6 +98,13 @@ data class Conditions(
     val vacationDays: Int = 22,
     val personalDays: Int = 2,
     val medicalHoursPerYear: Double = 20.0,
+    /** Horas de una jornada normal y de una jornada corta (días amarillos del calendario). */
+    val normalDayHours: Double = 8.0,
+    val shortDayHours: Double = 6.0,
+    /** Lo que se paga por hora trabajada en un sábado o festivo activable (precio de sábado). */
+    val activablePricePerHour: Double = 0.0,
+    /** Días activables que la empresa puede obligarte a trabajar al año. */
+    val maxActivablesPerYear: Int = 5,
     /** Ciclo de rotación semanal, p. ej. [Mañana, Tarde]. */
     val rotation: List<ShiftType> = listOf(ShiftType.MORNING, ShiftType.AFTERNOON),
     /** Lunes de una semana en la que se trabaja rotation[0]. */

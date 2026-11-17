@@ -86,6 +86,10 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
 
         SectionCard("Jornada") {
             NumberField("Horas anuales de convenio", d.annualHours, Modifier.fillMaxWidth(), "h") { d = d.copy(annualHours = it) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumberField("Jornada normal", d.normalDayHours, Modifier.weight(1f), "h") { d = d.copy(normalDayHours = it) }
+                NumberField("Jornada corta", d.shortDayHours, Modifier.weight(1f), "h") { d = d.copy(shortDayHours = it) }
+            }
             KeyValue("Precio hora ordinaria", money(d.hourlyRate))
             Text("Días laborables", style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -114,13 +118,19 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
         SectionCard("Pluses y horas extra") {
             NumberField("Plus nocturnidad por hora (22–6 h)", d.nightBonusPerHour, Modifier.fillMaxWidth(), "€") { d = d.copy(nightBonusPerHour = it) }
             NumberField("Plus festivo por hora", d.holidayBonusPerHour, Modifier.fillMaxWidth(), "€") { d = d.copy(holidayBonusPerHour = it) }
+            NumberField("Precio hora en sábado / festivo activable", d.activablePricePerHour, Modifier.fillMaxWidth(), "€") {
+                d = d.copy(activablePricePerHour = it)
+            }
+            NumberField("Activables obligatorios al año", d.maxActivablesPerYear.toDouble(), Modifier.fillMaxWidth(), "días") {
+                d = d.copy(maxActivablesPerYear = it.toInt())
+            }
             NumberField("Precio hora extra (0 = hora ordinaria)", d.overtimePrice, Modifier.fillMaxWidth(), "€") { d = d.copy(overtimePrice = it) }
         }
 
         SectionCard("Permisos anuales") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField("Vacaciones", d.vacationDays.toDouble(), Modifier.weight(1f), "días") { d = d.copy(vacationDays = it.toInt()) }
-                NumberField("Asuntos propios", d.personalDays.toDouble(), Modifier.weight(1f), "días") { d = d.copy(personalDays = it.toInt()) }
+                NumberField("Libre disposición", d.personalDays.toDouble(), Modifier.weight(1f), "días") { d = d.copy(personalDays = it.toInt()) }
             }
             NumberField("Horas de médico al año", d.medicalHoursPerYear, Modifier.fillMaxWidth(), "h") { d = d.copy(medicalHoursPerYear = it) }
         }

@@ -14,3 +14,9 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
 }
+
+tasks.test {
+    // Permite probar con una captura real: ./gradlew :core:test -Dreal.image=... -Dreal.ocr=...
+    listOf("real.image", "real.ocr").forEach { k -> System.getProperty(k)?.let { systemProperty(k, it) } }
+    testLogging { showStandardStreams = true }
+}

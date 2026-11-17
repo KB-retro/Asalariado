@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.asalariado.core.DayType
 import com.asalariado.core.ShiftType
 import java.text.NumberFormat
 import java.time.Instant
@@ -82,6 +83,18 @@ fun shiftColors(s: ShiftType): Pair<Color, Color> {
         else -> Color.White
     }
     return base to fg
+}
+
+/** Color de cada tipo de día del calendario laboral (como en los calendarios de convenio). */
+fun dayTypeColor(t: DayType): Color = when (t) {
+    DayType.LABORABLE -> Color.Transparent
+    DayType.JORNADA_CORTA -> Color(0xFFFFE600)
+    DayType.ACTIVABLE_LABORABLE -> Color(0xFFB000C0)
+    DayType.FESTIVO -> Color(0xFFE53935)
+    DayType.SABADO_FR -> Color(0xFF00A050)
+    DayType.ACTIVABLE_FR -> Color(0xFFFF8FF0)
+    DayType.PUENTE -> Color(0xFF4DD8F0)
+    DayType.VACACIONES -> Color(0xFF1E6FD0)
 }
 
 @Composable

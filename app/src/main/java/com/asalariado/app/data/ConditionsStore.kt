@@ -47,6 +47,10 @@ class ConditionsStore(context: Context) {
             put("vacationDays", c.vacationDays)
             put("personalDays", c.personalDays)
             put("medicalHoursPerYear", c.medicalHoursPerYear)
+            put("normalDayHours", c.normalDayHours)
+            put("shortDayHours", c.shortDayHours)
+            put("activablePricePerHour", c.activablePricePerHour)
+            put("maxActivablesPerYear", c.maxActivablesPerYear)
             put("rotation", JSONArray(c.rotation.map { it.name }))
             c.rotationAnchor?.let { put("rotationAnchor", it.toString()) }
         }
@@ -76,6 +80,10 @@ class ConditionsStore(context: Context) {
                 vacationDays = o.optInt("vacationDays", d.vacationDays),
                 personalDays = o.optInt("personalDays", d.personalDays),
                 medicalHoursPerYear = o.optDouble("medicalHoursPerYear", d.medicalHoursPerYear),
+                normalDayHours = o.optDouble("normalDayHours", d.normalDayHours),
+                shortDayHours = o.optDouble("shortDayHours", d.shortDayHours),
+                activablePricePerHour = o.optDouble("activablePricePerHour", d.activablePricePerHour),
+                maxActivablesPerYear = o.optInt("maxActivablesPerYear", d.maxActivablesPerYear),
                 rotation = strings("rotation")?.map { ShiftType.fromName(it) }?.ifEmpty { null } ?: d.rotation,
                 rotationAnchor = o.optString("rotationAnchor", "").takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it) },
             )

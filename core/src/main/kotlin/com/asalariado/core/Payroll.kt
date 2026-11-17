@@ -16,6 +16,12 @@ data class MonthSummary(
     val personalDays: Int,
     val sickDays: Int,
     val shiftCounts: Map<ShiftType, Int>,
+    /** Sábados / festivos activables trabajados y lo que se cobra por ellos. */
+    val activableDays: Int,
+    val activableHours: Double,
+    val activablePlus: Double,
+    /** Horas que marca el calendario laboral para el mes (0 si no hay calendario). */
+    val calendarHours: Double,
     val baseGross: Double,
     val extraPay: Double,
     val nightPlus: Double,
@@ -44,6 +50,10 @@ data class YearSummary(
     val vacationAllowed: Int,
     val personalUsed: Int,
     val personalAllowed: Int,
+    val activableUsed: Int,
+    val maxActivables: Int,
+    /** Horas de trabajo según el calendario laboral importado (0 si no hay). */
+    val calendarHours: Double,
     val overtimeHours: Double,
     val overtimeValue: Double,
     val expectedGross: Double,
@@ -65,6 +75,7 @@ object Payroll {
         medical: Collection<MedicalVisit>,
         c: Conditions,
         payslip: Payslip?,
+        calendar: Map<LocalDate, DayType> = emptyMap(),
     ): MonthSummary {
         val inMonth = days.filter { YearMonth.from(it.date) == ym }
         val med = medical.filter { YearMonth.from(it.date) == ym && it.justified }
@@ -84,10 +95,14 @@ object Payroll {
 
         val nightPlus = nightHours * c.nightBonusPerHour
         val holidayPlus = holidayHours * c.holidayBonusPerHour
-        val gross = monthlyBase + extraPay + nightPlus + holidayPlus
+        val activable = work.filter { calendar[it.date]?.activable == true }
+        val activableHours = activable.sumOf { it.workedHours(c) }
+        val activablePlus = activableHours * c.activablePricePerHour
+        val calendarHours = calendar.filter { YearMonth.from(it.key) == ym }.values.sumOf { plannedHours(it, c) }
+        val gross = monthlyBase + extraPay + nightPlus + holidayPlus + activablePlus
 
         // La base de cotización incluye las pagas extra prorrateadas, no la paga extra del mes.
-        val ssBase = c.grossAnnualSalary / 12.0 + nightPlus + holidayPlus
+        val ssBase = c.grossAnnualSalary / 12.0 + nightPlus + holidayPlus + activablePlus
         val ss = ssBase * c.ssPercent / 100.0
         val irpf = gross * c.irpfPercent / 100.0
 
@@ -103,6 +118,10 @@ object Payroll {
             personalDays = inMonth.count { it.shift == ShiftType.PERSONAL },
             sickDays = inMonth.count { it.shift == ShiftType.SICK },
             shiftCounts = inMonth.groupingBy { it.shift }.eachCount(),
+            activableDays = activable.size,
+            activableHours = activableHours,
+            activablePlus = activablePlus,
+            calendarHours = calendarHours,
             baseGross = monthlyBase,
             extraPay = extraPay,
             nightPlus = nightPlus,
@@ -121,11 +140,12 @@ object Payroll {
         medical: Collection<MedicalVisit>,
         payslips: Collection<Payslip>,
         c: Conditions,
+        calendar: Map<LocalDate, DayType> = emptyMap(),
     ): YearSummary {
         val yDays = days.filter { it.date.year == year }
         val yMed = medical.filter { it.date.year == year }
         val months = (1..12).map { m ->
-            month(YearMonth.of(year, m), yDays, yMed, c, payslips.firstOrNull { it.year == year && it.month == m })
+            month(YearMonth.of(year, m), yDays, yMed, c, payslips.firstOrNull { it.year == year && it.month == m }, calendar)
         }
         val counted = months.sumOf { it.countedHours }
         val overtime = (counted - c.annualHours).coerceAtLeast(0.0)
@@ -142,6 +162,9 @@ object Payroll {
             vacationAllowed = c.vacationDays,
             personalUsed = months.sumOf { it.personalDays },
             personalAllowed = c.personalDays,
+            activableUsed = months.sumOf { it.activableDays },
+            maxActivables = c.maxActivablesPerYear,
+            calendarHours = months.sumOf { it.calendarHours },
             overtimeHours = overtime,
             overtimeValue = overtime * otPrice,
             expectedGross = months.sumOf { it.expectedGross },
@@ -150,6 +173,13 @@ object Payroll {
             receivedNet = withSlip.sumOf { it.payslip?.net ?: 0.0 },
             monthsWithPayslip = withSlip.size,
         )
+    }
+
+    /** Horas de trabajo que corresponden a un tipo de día del calendario laboral. */
+    fun plannedHours(t: DayType, c: Conditions): Double = when {
+        t == DayType.JORNADA_CORTA -> c.shortDayHours
+        t.workDay -> c.normalDayHours
+        else -> 0.0
     }
 
     /** Horas que, proporcionalmente, deberían llevarse hechas hasta [today]. */

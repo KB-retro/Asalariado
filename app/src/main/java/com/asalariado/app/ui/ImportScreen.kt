@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,16 +50,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.asalariado.app.AppViewModel
 import com.asalariado.app.ImportRow
+import com.asalariado.core.AnnualCalendar
+import com.asalariado.core.Conditions
 import com.asalariado.core.DayEntry
+import com.asalariado.core.DayType
+import com.asalariado.core.Payroll
+import java.time.YearMonth
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, initialUri: Uri?, onClose: () -> Unit) {
+fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Conditions, initialUri: Uri?, onClose: () -> Unit) {
     val st by vm.import.collectAsState()
     var showRaw by remember { mutableStateOf(false) }
     var editIndex by remember { mutableStateOf<Int?>(null) }
@@ -78,9 +88,10 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, initialUr
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                "Elige una o varias capturas de tu cuadrante. La app lee el texto en el móvil (sin enviarlo a ningún sitio), " +
-                    "detecta fechas y turnos (Mañana/Tarde/Noche, M/T/N, Libre, horarios tipo 06:00-14:00) " +
-                    "y te deja revisarlos antes de guardarlos.",
+                "Elige una o varias capturas de tu cuadrante o de tu calendario laboral anual. La app las lee en el móvil " +
+                    "(sin enviarlas a ningún sitio): en un cuadrante detecta fechas y turnos (Mañana/Tarde/Noche, M/T/N, " +
+                    "Libre, 06:00-14:00…); en un calendario anual de colores, el tipo de cada día (festivos, sábados, " +
+                    "vacaciones, jornadas de 6 h, activables…). Antes de guardar puedes revisarlo.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Button(
@@ -102,12 +113,19 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, initialUr
             when {
                 st.loading -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 st.error != null -> Text(st.error!!, color = MaterialTheme.colorScheme.error)
+                st.annual != null -> {}
                 st.rawText.isNotEmpty() && st.rows.isEmpty() -> {
                     Text(
                         "No he encontrado fechas con turno en la imagen. Prueba a recortar la captura para que sólo " +
                             "salga el cuadrante, o revisa el texto leído.",
                         color = MaterialTheme.colorScheme.error,
                     )
+                }
+            }
+
+            st.annual?.let { annual ->
+                AnnualPreview(annual, c, Modifier.weight(1f)) { useHours, fill ->
+                    vm.commitAnnual(useHours, fill); onClose()
                 }
             }
 
@@ -128,7 +146,7 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, initialUr
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-            } else if (st.rawText.isNotEmpty()) {
+            } else if (st.rawText.isNotEmpty() && st.annual == null) {
                 OutlinedButton(onClick = { showRaw = true }) { Text("Ver texto leído") }
             }
         }
@@ -211,6 +229,113 @@ fun MonthSelector(year: Int, month: Int, onChange: (Int, Int) -> Unit) {
             val now = LocalDate.now().year
             DropdownMenu(yearMenu, { yearMenu = false }) {
                 (now - 2..now + 2).forEach { y -> DropdownMenuItem(text = { Text("$y") }, onClick = { onChange(y, month); yearMenu = false }) }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AnnualPreview(
+    annual: AnnualCalendar,
+    c: Conditions,
+    modifier: Modifier,
+    onSave: (useHours: Boolean, fillShifts: Boolean) -> Unit,
+) {
+    var useHours by remember { mutableStateOf(true) }
+    var fill by remember { mutableStateOf(c.rotationAnchor != null) }
+    val total = annual.days.values.sumOf { Payroll.plannedHours(it, c) }
+    val free = c.personalDays * c.normalDayHours
+    LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            Text(
+                "Calendario laboral ${annual.year} · ${annual.months.size} meses detectados",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text("Comprueba que los colores coinciden con tu calendario; luego podrás cambiar cualquier día tocándolo.",
+                style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DayType.entries.filter { it != DayType.LABORABLE }.forEach { t ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(dayTypeColor(t)))
+                        Text(" ${t.label}", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+        items(annual.months) { m ->
+            val ym = YearMonth.of(annual.year, m)
+            val types = (1..ym.lengthOfMonth()).map { annual.days[ym.atDay(it)] }
+            val lab = types.count { it?.workDay == true }
+            val h = types.filterNotNull().sumOf { Payroll.plannedHours(it, c) }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("${monthName(m)} · $lab laborables · ${hours(h)}", fontWeight = FontWeight.Medium)
+                    MiniMonth(ym, annual)
+                }
+            }
+        }
+        item {
+            SectionCard("Jornada anual") {
+                KeyValue("Horas según calendario", hours(total))
+                if (free > 0) KeyValue("Menos ${c.personalDays} días de libre disposición", "−" + hours(free))
+                KeyValue("Jornada anual", hours(total - free))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(useHours, { useHours = it })
+                    Text("Usar ${hours(total - free)} como horas anuales de convenio", style = MaterialTheme.typography.bodySmall)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(fill, { fill = it })
+                    Text("Rellenar mis turnos de ${annual.year} con la rotación de mañana/tarde", style = MaterialTheme.typography.bodySmall)
+                }
+                if (fill && c.rotationAnchor == null) Text(
+                    "Aún no has dicho qué semana empiezas de mañana: se tomará la primera semana como mañana. " +
+                        "Puedes cambiarlo luego con el botón de rotación.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+        }
+        item {
+            Button(onClick = { onSave(useHours, fill) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Guardar calendario laboral")
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun MiniMonth(ym: YearMonth, annual: AnnualCalendar) {
+    val offset = ym.atDay(1).dayOfWeek.value - 1
+    val cells = List(offset) { null } + (1..ym.lengthOfMonth()).toList()
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        cells.chunked(7).forEach { week ->
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                (0 until 7).forEach { i ->
+                    val day = week.getOrNull(i)
+                    val t = day?.let { annual.days[ym.atDay(it)] }
+                    val bg = t?.takeIf { it != DayType.LABORABLE }?.let { dayTypeColor(it) }
+                        ?: MaterialTheme.colorScheme.surface
+                    Box(
+                        Modifier.weight(1f).height(22.dp).clip(RoundedCornerShape(3.dp))
+                            .background(if (day == null) Color.Transparent else bg),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (day != null) Text(
+                            "$day",
+                            fontSize = 10.sp,
+                            color = when (t) {
+                                null, DayType.LABORABLE -> MaterialTheme.colorScheme.onSurface
+                                DayType.JORNADA_CORTA, DayType.ACTIVABLE_FR -> Color.Black
+                                else -> Color.White
+                            },
+                        )
+                    }
+                }
             }
         }
     }

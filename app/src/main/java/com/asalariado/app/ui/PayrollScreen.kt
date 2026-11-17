@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.asalariado.core.Conditions
 import com.asalariado.core.DayEntry
+import com.asalariado.core.DayType
 import com.asalariado.core.MedicalVisit
 import com.asalariado.core.MonthSummary
 import com.asalariado.core.Payroll
@@ -51,6 +52,7 @@ private fun diffColor(d: Double?): Color = when {
 @Composable
 fun PayrollScreen(
     days: Map<LocalDate, DayEntry>,
+    calendar: Map<LocalDate, DayType>,
     medical: List<MedicalVisit>,
     payslips: List<Payslip>,
     c: Conditions,
@@ -58,7 +60,7 @@ fun PayrollScreen(
 ) {
     var year by remember { mutableIntStateOf(LocalDate.now().year) }
     var editing by remember { mutableStateOf<MonthSummary?>(null) }
-    val y = remember(year, days, medical, payslips, c) { Payroll.year(year, days.values, medical, payslips, c) }
+    val y = remember(year, days, calendar, medical, payslips, c) { Payroll.year(year, days.values, medical, payslips, c, calendar) }
     val today = LocalDate.now()
     val expectedToDate = Payroll.expectedHoursToDate(year, today, c)
     val countedToDate = y.months.filter { year < today.year || it.month <= today.monthValue }.sumOf { it.countedHours }
@@ -74,6 +76,7 @@ fun PayrollScreen(
         item {
             SectionCard("Jornada anual") {
                 KeyValue("Horas del convenio", hours(y.annualHours))
+                if (y.calendarHours > 0) KeyValue("Horas según calendario laboral", hours(y.calendarHours))
                 KeyValue("Horas en calendario (trabajo + médico)", hours(y.countedHours))
                 LinearProgressIndicator(
                     progress = { if (y.annualHours > 0) (y.countedHours / y.annualHours).toFloat().coerceIn(0f, 1f) else 0f },
@@ -101,7 +104,13 @@ fun PayrollScreen(
             SectionCard("Permisos") {
                 KeyValue("Vacaciones", "${y.vacationUsed} de ${y.vacationAllowed} días",
                     if (y.vacationUsed > y.vacationAllowed) MaterialTheme.colorScheme.error else Color.Unspecified)
-                KeyValue("Asuntos propios", "${y.personalUsed} de ${y.personalAllowed} días")
+                KeyValue("Asuntos propios / libre disposición", "${y.personalUsed} de ${y.personalAllowed} días")
+                KeyValue("Activables trabajados (sábados/F.R.)", "${y.activableUsed} de ${y.maxActivables} obligatorios",
+                    if (y.activableUsed > y.maxActivables) MaterialTheme.colorScheme.secondary else Color.Unspecified)
+                if (y.activableUsed > y.maxActivables) Text(
+                    "Has trabajado más activables de los que te pueden obligar: los de más deberían ser voluntarios.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 KeyValue("Médico", "${hours(y.medicalHoursUsed)} de ${hours(y.medicalHoursAllowed)}",
                     if (y.medicalHoursUsed > y.medicalHoursAllowed) MaterialTheme.colorScheme.error else Color.Unspecified)
             }
@@ -148,6 +157,7 @@ private fun MonthRow(m: MonthSummary, onClick: () -> Unit) {
             if (m.extraPay > 0) KeyValue("  incluye paga extra", money(m.extraPay))
             if (m.nightPlus > 0) KeyValue("  plus nocturnidad", money(m.nightPlus))
             if (m.holidayPlus > 0) KeyValue("  plus festivos", money(m.holidayPlus))
+            if (m.activablePlus > 0) KeyValue("  ${m.activableDays} activables (precio sábado)", money(m.activablePlus))
             KeyValue("Neto estimado", money(m.expectedNet))
             m.payslip?.let { p ->
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))

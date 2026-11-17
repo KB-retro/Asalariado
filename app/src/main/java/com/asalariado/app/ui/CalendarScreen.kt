@@ -36,6 +36,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
@@ -51,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -58,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import com.asalariado.app.AppViewModel
 import com.asalariado.core.Conditions
 import com.asalariado.core.DayEntry
+import com.asalariado.core.DayType
 import com.asalariado.core.MedicalVisit
 import com.asalariado.core.Payroll
 import com.asalariado.core.Rotation
@@ -67,7 +70,14 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 @Composable
-fun CalendarScreen(vm: AppViewModel, days: Map<LocalDate, DayEntry>, medical: List<MedicalVisit>, c: Conditions, onImport: () -> Unit) {
+fun CalendarScreen(
+    vm: AppViewModel,
+    days: Map<LocalDate, DayEntry>,
+    calendar: Map<LocalDate, DayType>,
+    medical: List<MedicalVisit>,
+    c: Conditions,
+    onImport: () -> Unit,
+) {
     var ymText by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     val ym = YearMonth.parse(ymText)
     var editing by remember { mutableStateOf<LocalDate?>(null) }
@@ -111,9 +121,9 @@ fun CalendarScreen(vm: AppViewModel, days: Map<LocalDate, DayEntry>, medical: Li
                 Text("Ir a hoy")
             }
 
-            MonthGrid(ym, days, medicalDates, onDay = { editing = it }, onWeek = { d, s -> vm.setWeek(d, s) })
-            Legend()
-            MonthSummaryCard(ym, days, medical, c)
+            MonthGrid(ym, days, calendar, medicalDates, onDay = { editing = it }, onWeek = { d, s -> vm.setWeek(d, s) })
+            Legend(showDayTypes = calendar.isNotEmpty())
+            MonthSummaryCard(ym, days, calendar, medical, c)
             Text(
                 "Toca la columna «Sem» para marcar una semana entera de mañana o de tarde, " +
                     "y un día para cambiarlo (vacaciones, horario distinto, festivo…).",
@@ -128,7 +138,9 @@ fun CalendarScreen(vm: AppViewModel, days: Map<LocalDate, DayEntry>, medical: Li
         DayDialog(
             date = date,
             entry = days[date],
+            type = calendar[date],
             c = c,
+            onType = { vm.setCalendarType(date, it) },
             onDismiss = { editing = null },
             onSave = { vm.saveDay(it); editing = null },
             onDelete = { vm.deleteDay(date); editing = null },
@@ -148,6 +160,7 @@ private val weekdayHeaders = listOf("L", "M", "X", "J", "V", "S", "D")
 private fun MonthGrid(
     ym: YearMonth,
     days: Map<LocalDate, DayEntry>,
+    calendar: Map<LocalDate, DayType>,
     medicalDates: Set<LocalDate>,
     onDay: (LocalDate) -> Unit,
     onWeek: (LocalDate, ShiftType) -> Unit,
@@ -171,6 +184,7 @@ private fun MonthGrid(
                     DayCell(
                         date = d,
                         entry = days[d],
+                        type = calendar[d],
                         inMonth = YearMonth.from(d) == ym,
                         isToday = d == today,
                         hasMedical = d in medicalDates,
@@ -219,6 +233,7 @@ private fun WeekChip(monday: LocalDate, days: Map<LocalDate, DayEntry>, onWeek: 
 private fun DayCell(
     date: LocalDate,
     entry: DayEntry?,
+    type: DayType?,
     inMonth: Boolean,
     isToday: Boolean,
     hasMedical: Boolean,
@@ -226,7 +241,12 @@ private fun DayCell(
     onClick: () -> Unit,
 ) {
     val shift = entry?.shift
-    val (bg, fg) = if (shift != null) shiftColors(shift) else MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+    val typeColor = type?.takeIf { it != DayType.LABORABLE }?.let { dayTypeColor(it) }
+    val (bg, fg) = when {
+        shift != null -> shiftColors(shift)
+        typeColor != null -> typeColor to if (type == DayType.JORNADA_CORTA || type == DayType.ACTIVABLE_FR) Color.Black else Color.White
+        else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Box(
         modifier.height(52.dp).alpha(if (inMonth) 1f else 0.4f).clip(RoundedCornerShape(8.dp)).background(bg)
             .then(if (isToday) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
@@ -236,6 +256,16 @@ private fun DayCell(
         Text("${date.dayOfMonth}", color = fg, fontSize = 11.sp, modifier = Modifier.align(Alignment.TopStart))
         if (shift != null) {
             Text(shift.code, color = fg, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.align(Alignment.Center))
+        } else if (type != null && type.code.isNotEmpty()) {
+            Text(type.code, color = fg, fontSize = 12.sp, modifier = Modifier.align(Alignment.Center))
+        }
+        // Franja inferior con el tipo de día del calendario laboral cuando hay turno.
+        if (shift != null && typeColor != null) {
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.8f).height(5.dp)
+                    .clip(RoundedCornerShape(3.dp)).background(typeColor)
+                    .border(0.5.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(3.dp)),
+            )
         }
         if (entry?.start != null || entry?.holidayWorked == true) {
             Text(if (entry?.holidayWorked == true) "F" else "⏱", color = fg, fontSize = 9.sp, modifier = Modifier.align(Alignment.BottomStart))
@@ -248,7 +278,19 @@ private fun DayCell(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Legend() {
+private fun Legend(showDayTypes: Boolean) {
+    if (showDayTypes) {
+        Text("Calendario laboral (franja inferior)", style = MaterialTheme.typography.labelMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            DayType.entries.filter { it != DayType.LABORABLE }.forEach { t ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(18.dp, 10.dp).clip(RoundedCornerShape(3.dp)).background(dayTypeColor(t)))
+                    Text(" ${t.label}", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        Text("Turnos", style = MaterialTheme.typography.labelMedium)
+    }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ShiftType.entries.forEach { s ->
             val (bg, fg) = shiftColors(s)
@@ -267,11 +309,19 @@ private fun Legend() {
 }
 
 @Composable
-private fun MonthSummaryCard(ym: YearMonth, days: Map<LocalDate, DayEntry>, medical: List<MedicalVisit>, c: Conditions) {
-    val s = remember(ym, days, medical, c) { Payroll.month(ym, days.values, medical, c, null) }
+private fun MonthSummaryCard(
+    ym: YearMonth,
+    days: Map<LocalDate, DayEntry>,
+    calendar: Map<LocalDate, DayType>,
+    medical: List<MedicalVisit>,
+    c: Conditions,
+) {
+    val s = remember(ym, days, calendar, medical, c) { Payroll.month(ym, days.values, medical, c, null, calendar) }
     SectionCard("Resumen de ${monthName(ym.monthValue).lowercase()}") {
         KeyValue("Días trabajados", "${s.workedDays}")
         KeyValue("Horas trabajadas", hours(s.workedHours))
+        if (s.calendarHours > 0) KeyValue("Horas según calendario laboral", hours(s.calendarHours))
+        if (s.activableDays > 0) KeyValue("Activables trabajados", "${s.activableDays} (${hours(s.activableHours)})")
         if (s.medicalHours > 0) KeyValue("Horas de médico (justificadas)", hours(s.medicalHours))
         if (s.nightHours > 0) KeyValue("Horas nocturnas", hours(s.nightHours))
         if (s.holidayHours > 0) KeyValue("Horas en festivo", hours(s.holidayHours))
@@ -296,7 +346,9 @@ fun ShiftPicker(selected: ShiftType, onSelect: (ShiftType) -> Unit, options: Lis
 private fun DayDialog(
     date: LocalDate,
     entry: DayEntry?,
+    type: DayType?,
     c: Conditions,
+    onType: (DayType?) -> Unit,
     onDismiss: () -> Unit,
     onSave: (DayEntry) -> Unit,
     onDelete: () -> Unit,
@@ -306,6 +358,8 @@ private fun DayDialog(
     var end by remember { mutableStateOf(entry?.end) }
     var holiday by remember { mutableStateOf(entry?.holidayWorked ?: false) }
     var note by remember { mutableStateOf(entry?.note ?: "") }
+    var dayType by remember { mutableStateOf(type) }
+    var typeMenu by remember { mutableStateOf(false) }
     val def = c.hoursFor(shift)
 
     AlertDialog(
@@ -313,6 +367,24 @@ private fun DayDialog(
         title = { Text(date.format(dayFmt).replaceFirstChar { it.uppercase() }) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box {
+                    OutlinedButton(onClick = { typeMenu = true }) {
+                        Text("Calendario laboral: ${dayType?.label ?: "sin definir"}")
+                    }
+                    DropdownMenu(typeMenu, { typeMenu = false }) {
+                        DayType.entries.forEach { t ->
+                            DropdownMenuItem(text = { Text(t.label) }, onClick = { dayType = t; typeMenu = false })
+                        }
+                        DropdownMenuItem(text = { Text("Sin definir") }, onClick = { dayType = null; typeMenu = false })
+                    }
+                }
+                if (dayType?.activable == true) Text(
+                    "Día activable: si te lo hacen trabajar, elige el turno (jornada de ${hours(c.normalDayHours)}). " +
+                        "Contará como activable y se pagará como sábado.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                Text("Turno", style = MaterialTheme.typography.labelLarge)
                 ShiftPicker(shift, { shift = it; start = null; end = null })
                 if (shift.isWork) {
                     Text(
@@ -336,7 +408,12 @@ private fun DayDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                onSave(DayEntry(date, shift, start, end, holiday && shift.isWork, note))
+                if (dayType != type) onType(dayType)
+                // En jornada corta, si no se indica horario, se guarda la duración corta.
+                val autoEnd = if (dayType == DayType.JORNADA_CORTA && start == null && end == null && shift.isWork) {
+                    def?.let { it.start to it.start.plusMinutes((c.shortDayHours * 60).toLong()) }
+                } else null
+                onSave(DayEntry(date, shift, autoEnd?.first ?: start, autoEnd?.second ?: end, holiday && shift.isWork, note))
             }) { Text("Guardar") }
         },
         dismissButton = {
@@ -396,7 +473,8 @@ private fun RotationDialog(
                 }
                 Text(
                     "Días laborables: ${c.workDays.sortedBy { it.value }.joinToString(" ") { weekdayHeaders[it.value - 1] }} " +
-                        "(se cambian en Condiciones).",
+                        "(se cambian en Condiciones). Si has importado el calendario laboral, manda él: " +
+                        "festivos, vacaciones y puentes quedan libres y los días amarillos son de ${hours(c.shortDayHours)}.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

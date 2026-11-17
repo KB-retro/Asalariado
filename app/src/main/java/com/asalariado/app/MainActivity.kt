@@ -73,6 +73,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 private fun App(vm: AppViewModel) {
     val days by vm.days.collectAsState()
+    val calendar by vm.calendar.collectAsState()
     val medical by vm.medical.collectAsState()
     val payslips by vm.payslips.collectAsState()
     val conditions by vm.conditions.collectAsState()
@@ -92,7 +93,7 @@ private fun App(vm: AppViewModel) {
 
     if (importing) {
         BackHandler { vm.clearImport(); importing = false; importUri = null }
-        ImportScreen(vm, days, importUri?.let(Uri::parse)) { importing = false; importUri = null }
+        ImportScreen(vm, days, conditions, importUri?.let(Uri::parse)) { importing = false; importUri = null }
         return
     }
 
@@ -113,9 +114,9 @@ private fun App(vm: AppViewModel) {
         val m = Modifier.padding(pad)
         androidx.compose.foundation.layout.Box(m) {
             when (Tab.entries[tab]) {
-                Tab.Calendar -> CalendarScreen(vm, days, medical, conditions, onImport = { importing = true })
+                Tab.Calendar -> CalendarScreen(vm, days, calendar, medical, conditions, onImport = { importing = true })
                 Tab.Medical -> MedicalScreen(vm, medical, conditions)
-                Tab.Payroll -> PayrollScreen(days, medical, payslips, conditions, vm::savePayslip)
+                Tab.Payroll -> PayrollScreen(days, calendar, medical, payslips, conditions, vm::savePayslip)
                 Tab.Conditions -> ConditionsScreen(conditions, vm::saveConditions)
             }
         }

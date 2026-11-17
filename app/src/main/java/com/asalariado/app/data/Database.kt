@@ -11,6 +11,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.asalariado.core.DayEntry
 import com.asalariado.core.MedicalVisit
 import com.asalariado.core.Payslip
@@ -48,6 +50,13 @@ data class PayslipEntity(
     val gross: Double?,
     val net: Double?,
     val note: String,
+)
+
+/** Tipo de día del calendario laboral anual. */
+@Entity(tableName = "calendar_days")
+data class CalendarDayEntity(
+    @PrimaryKey val epochDay: Long,
+    val type: String,
 )
 
 private fun LocalTime.toMin() = hour * 60 + minute
@@ -101,6 +110,15 @@ interface AppDao {
     @Query("DELETE FROM medical WHERE id = :id")
     suspend fun deleteMedical(id: Long)
 
+    @Query("SELECT * FROM calendar_days")
+    fun allCalendarDays(): Flow<List<CalendarDayEntity>>
+
+    @Upsert
+    suspend fun upsertCalendarDays(days: List<CalendarDayEntity>)
+
+    @Query("DELETE FROM calendar_days WHERE epochDay = :epochDay")
+    suspend fun deleteCalendarDay(epochDay: Long)
+
     @Query("SELECT * FROM payslips")
     fun allPayslips(): Flow<List<PayslipEntity>>
 
@@ -111,14 +129,27 @@ interface AppDao {
     suspend fun deletePayslip(year: Int, month: Int)
 }
 
-@Database(entities = [DayEntity::class, MedicalEntity::class, PayslipEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [DayEntity::class, MedicalEntity::class, PayslipEntity::class, CalendarDayEntity::class],
+    version = 2,
+    exportSchema = false,
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): AppDao
 
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `calendar_days` (`epochDay` INTEGER NOT NULL, `type` TEXT NOT NULL, PRIMARY KEY(`epochDay`))",
+                )
+            }
+        }
+
         @Volatile private var instance: AppDatabase? = null
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "asalariado.db")
+                .addMigrations(MIGRATION_1_2)
                 .build().also { instance = it }
         }
     }
