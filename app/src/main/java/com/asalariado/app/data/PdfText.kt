@@ -55,6 +55,26 @@ object PdfText {
         }
     }
 
+    /**
+     * Para calendarios en PDF: cada página dibujada (para leer los colores) junto con su texto en las
+     * mismas coordenadas, sacado del propio PDF (exacto, sin reconocer la imagen). Si el PDF no tiene
+     * texto (es una foto escaneada), el texto viene vacío y hay que usar OCR.
+     */
+    fun pagesWithText(context: Context, uri: Uri, password: String?): List<Pair<Bitmap, List<TextItem>>> {
+        PDFBoxResourceLoader.init(context.applicationContext)
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("no se pudo abrir el archivo")
+        val doc = try { PDDocument.load(bytes, password ?: "") } catch (e: InvalidPasswordException) { throw WrongPassword() }
+        doc.use {
+            val r = PDFRenderer(doc)
+            return (0 until minOf(doc.numberOfPages, 4)).map { i ->
+                val width = doc.getPage(i).mediaBox.width
+                val scale = 2000f / width
+                val bmp = r.renderImage(i, scale, com.tom_roush.pdfbox.rendering.ImageType.RGB)
+                bmp to pageText(doc, i + 1, scale)
+            }
+        }
+    }
+
     /** Dibuja las páginas (máx. 4) de un PDF, con contraseña si la tiene, para leerlas con OCR. */
     fun render(context: Context, uri: Uri, password: String?): List<Bitmap> {
         PDFBoxResourceLoader.init(context.applicationContext)
@@ -70,7 +90,7 @@ object PdfText {
      * Agrupa las letras de cada línea en trozos separados por huecos grandes: así «Plus disponibilidad
      * sábados y FR» queda junto y cada importe de la columna queda aparte, como hace el OCR.
      */
-    private fun pageText(doc: PDDocument, page: Int): List<TextItem> {
+    private fun pageText(doc: PDDocument, page: Int, scale: Float = 3f): List<TextItem> {
         val items = ArrayList<TextItem>()
         val stripper = object : PDFTextStripper() {
             override fun writeString(text: String?, positions: MutableList<TextPosition>?) {
@@ -80,7 +100,7 @@ object PdfText {
                 var lastRight = -1f
                 fun flush() {
                     val s = cur.toString().trim()
-                    if (s.isNotEmpty()) items += TextItem(s, (l * 3).toInt(), (t * 3).toInt(), (r * 3).toInt(), (b * 3).toInt())
+                    if (s.isNotEmpty()) items += TextItem(s, (l * scale).toInt(), (t * scale).toInt(), (r * scale).toInt(), (b * scale).toInt())
                     cur.setLength(0)
                     lastRight = -1f
                 }

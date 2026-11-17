@@ -13,6 +13,11 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
+import com.google.android.gms.tasks.Task
+import com.google.mlkit.vision.text.TextRecognizer
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
@@ -39,13 +44,21 @@ object Ocr {
 
     /** Reconoce una imagen o un PDF (cada página es un resultado). */
     suspend fun recognize(context: Context, uri: Uri, password: String? = null): List<Result> {
-        val bitmaps = withContext(Dispatchers.IO) {
-            if (isPdf(context, uri)) {
-                // PdfRenderer no abre PDF con contraseña: entonces se dibujan con pdfbox.
-                runCatching { renderPdf(context, uri) }.getOrElse { PdfText.render(context, uri, password) }
-            } else listOf(decodeImage(context, uri))
+        if (isPdf(context, uri)) {
+            // PDF con texto (como el del calendario): se lee el texto del propio PDF, exacto y sin OCR,
+            // y los colores de la página dibujada. Sólo si es una foto escaneada se usa OCR.
+            val pages = withContext(Dispatchers.IO) { PdfText.pagesWithText(context, uri, password) }
+            return pages.map { (bmp, items) ->
+                if (items.size > 40) {
+                    val words = com.asalariado.core.AnnualCalendarParser.splitWords(items)
+                    Result(items, words, items.joinToString("\n") { it.text }, withContext(Dispatchers.Default) { BitmapPixels(bmp) })
+                } else {
+                    recognizeBitmap(context, bmp)
+                }
+            }
         }
-        return bitmaps.map { recognizeBitmap(it) }
+        val bmp = withContext(Dispatchers.IO) { decodeImage(context, uri) }
+        return listOf(recognizeBitmap(context, bmp))
     }
 
     private fun isPdf(context: Context, uri: Uri): Boolean =
@@ -91,9 +104,33 @@ object Ocr {
         }
     }
 
-    suspend fun recognizeBitmap(bitmap: Bitmap): Result {
+    /** Error claro cuando el lector de texto de Google aún no está descargado. */
+    class ModelNotReady : Exception(
+        "El lector de texto se está descargando de Google (hace falta internet la primera vez). Vuelve a intentarlo en un minuto.",
+    )
+
+    private suspend fun <T> Task<T>.awaitTask(): T = suspendCancellableCoroutine { cont ->
+        addOnSuccessListener { cont.resume(it) }
+        addOnFailureListener { cont.resumeWithException(it) }
+    }
+
+    /** Se asegura de que el modelo de OCR de Google Play Services está descargado (espera hasta 90 s). */
+    private suspend fun ensureModel(context: Context, recognizer: TextRecognizer) {
+        val client = ModuleInstall.getClient(context)
+        val ok = runCatching { client.areModulesAvailable(recognizer).awaitTask().areModulesAvailable() }.getOrDefault(true)
+        if (ok) return
+        runCatching { client.installModules(ModuleInstallRequest.newBuilder().addApi(recognizer).build()).awaitTask() }
+        repeat(45) {
+            delay(2000)
+            if (runCatching { client.areModulesAvailable(recognizer).awaitTask().areModulesAvailable() }.getOrDefault(false)) return
+        }
+        throw ModelNotReady()
+    }
+
+    suspend fun recognizeBitmap(context: Context, bitmap: Bitmap): Result {
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         try {
+            ensureModel(context, recognizer)
             val text = suspendCancellableCoroutine { cont ->
                 recognizer.process(InputImage.fromBitmap(bitmap, 0))
                     .addOnSuccessListener { cont.resume(it) }

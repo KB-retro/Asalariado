@@ -301,7 +301,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         val doc = PdfText.read(app, uri, payslipPassword.value)
                         pdf = doc.unlocked
                         if (doc.images.isEmpty()) doc.pages.flatten()
-                        else doc.images.flatMap { Ocr.recognizeBitmap(it).lines }
+                        else doc.images.flatMap { Ocr.recognizeBitmap(app, it).lines }
                     } else {
                         Ocr.recognize(app, uri).flatMap { it.lines }
                     }

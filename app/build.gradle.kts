@@ -86,6 +86,8 @@ dependencies {
 
     // OCR en el móvil con el modelo de Google Play Services (no va dentro del APK; se descarga una vez).
     implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
+    // Para pedir y esperar la descarga del modelo de OCR.
+    implementation("com.google.android.gms:play-services-base:18.5.0")
 
     // Leer nóminas en PDF (también con contraseña) sin OCR.
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
