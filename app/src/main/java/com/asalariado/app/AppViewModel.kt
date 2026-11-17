@@ -413,7 +413,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (uris.isEmpty()) return@launch
         import.value = import.value.copy(loading = true, error = null, annual = null, rows = emptyList(), rawText = "")
         try {
-            lastOcr = uris.flatMap { Ocr.recognize(getApplication(), it) }
+            lastOcr = uris.flatMap { Ocr.recognize(getApplication(), it, payslipPassword.value) }
             reparse(detect = true)
         } catch (e: Exception) {
             import.value = import.value.copy(loading = false, error = "No se pudo leer el archivo: ${e.message}")

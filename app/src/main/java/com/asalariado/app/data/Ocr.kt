@@ -38,9 +38,12 @@ object Ocr {
     }
 
     /** Reconoce una imagen o un PDF (cada página es un resultado). */
-    suspend fun recognize(context: Context, uri: Uri): List<Result> {
+    suspend fun recognize(context: Context, uri: Uri, password: String? = null): List<Result> {
         val bitmaps = withContext(Dispatchers.IO) {
-            if (isPdf(context, uri)) renderPdf(context, uri) else listOf(decodeImage(context, uri))
+            if (isPdf(context, uri)) {
+                // PdfRenderer no abre PDF con contraseña: entonces se dibujan con pdfbox.
+                runCatching { renderPdf(context, uri) }.getOrElse { PdfText.render(context, uri, password) }
+            } else listOf(decodeImage(context, uri))
         }
         return bitmaps.map { recognizeBitmap(it) }
     }
@@ -48,12 +51,19 @@ object Ocr {
     private fun isPdf(context: Context, uri: Uri): Boolean =
         context.contentResolver.getType(uri) == "application/pdf" || uri.toString().lowercase().endsWith(".pdf")
 
-    private fun decodeImage(context: Context, uri: Uri): Bitmap =
-        context.contentResolver.openInputStream(uri)?.use { input ->
+    /** Abre la imagen reduciéndola si es muy grande (una foto de 12 MP agotaría la memoria). */
+    private fun decodeImage(context: Context, uri: Uri): Bitmap {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 2600) sample *= 2
+        return context.contentResolver.openInputStream(uri)?.use { input ->
             BitmapFactory.decodeStream(input, null, BitmapFactory.Options().apply {
                 inPreferredConfig = Bitmap.Config.ARGB_8888
+                inSampleSize = sample
             })
         } ?: error("formato de imagen no soportado")
+    }
 
     /** Dibuja las páginas del PDF (máx. 4) a unos 2000 px de ancho sobre fondo blanco. */
     private fun renderPdf(context: Context, uri: Uri): List<Bitmap> {

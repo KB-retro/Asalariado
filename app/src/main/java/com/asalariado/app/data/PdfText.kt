@@ -55,6 +55,17 @@ object PdfText {
         }
     }
 
+    /** Dibuja las páginas (máx. 4) de un PDF, con contraseña si la tiene, para leerlas con OCR. */
+    fun render(context: Context, uri: Uri, password: String?): List<Bitmap> {
+        PDFBoxResourceLoader.init(context.applicationContext)
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("no se pudo abrir el archivo")
+        val doc = try { PDDocument.load(bytes, password ?: "") } catch (e: InvalidPasswordException) { throw WrongPassword() }
+        doc.use {
+            val r = PDFRenderer(doc)
+            return (0 until minOf(doc.numberOfPages, 4)).map { r.renderImageWithDPI(it, 200f, com.tom_roush.pdfbox.rendering.ImageType.RGB) }
+        }
+    }
+
     /**
      * Agrupa las letras de cada línea en trozos separados por huecos grandes: así «Plus disponibilidad
      * sábados y FR» queda junto y cada importe de la columna queda aparte, como hace el OCR.
