@@ -90,72 +90,7 @@ fun SettingsScreen(vm: AppViewModel, prefs: UiPrefs) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        ScreenHeader("Ajustes", "Aspecto de la app y copias de seguridad")
-
-        SectionCard("Tema de color", icon = Icons.Default.Palette) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Palette.entries.filter { it != Palette.DINAMICO || dynamicColorAvailable }.forEach { p ->
-                    PaletteSwatch(p, selected = prefs.palette == p) { vm.saveUi(prefs.copy(palette = p)) }
-                }
-            }
-        }
-
-        SectionCard("Modo", icon = Icons.Default.DarkMode) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ThemeMode.entries.forEach { m ->
-                    FilterChip(selected = prefs.mode == m, onClick = { vm.saveUi(prefs.copy(mode = m)) }, label = { Text(m.label) })
-                }
-            }
-        }
-
-        SectionCard("Estilo", icon = Icons.Default.Style) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                UiStyle.entries.forEach { st ->
-                    StylePreview(st, selected = prefs.style == st) {
-                        // Como en Baby Registry: Píxel va con su fuente y al dejarlo se vuelve a Nunito.
-                        val font = when {
-                            st == UiStyle.PIXEL -> AppFont.PIXELIFY
-                            prefs.font == AppFont.PIXELIFY -> AppFont.NUNITO
-                            else -> prefs.font
-                        }
-                        vm.saveUi(prefs.copy(style = st, font = font))
-                    }
-                }
-            }
-        }
-
-        SectionCard("Fuente", icon = Icons.Default.TextFields) {
-            AppFont.entries.forEach { f ->
-                Row(
-                    Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { vm.saveUi(prefs.copy(font = f)) }
-                        .background(if (prefs.font == f) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        f.label,
-                        fontFamily = f.family,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (prefs.font == f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text("Nómina 2.136,13 €", fontFamily = f.family, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (prefs.font == f) {
-                        Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
-        }
-
-        SectionCard("Fondo", icon = Icons.Default.Wallpaper) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Backdrop.entries.forEach { b ->
-                    BackdropPreview(b, selected = prefs.backdrop == b) { vm.saveUi(prefs.copy(backdrop = b)) }
-                }
-            }
-        }
+        ScreenHeader("Ajustes", "Seguridad, nóminas, avisos, copias y aspecto")
 
         SectionCard("Seguridad", icon = Icons.Default.Fingerprint) {
             val ctx = LocalContext.current
@@ -289,6 +224,79 @@ fun SettingsScreen(vm: AppViewModel, prefs: UiPrefs) {
                 "Además, Android guarda los datos de la app en tu copia de Google si la tienes activada en el móvil.",
                 style = MaterialTheme.typography.labelSmall,
             )
+        }
+
+        ExpandableCard("Aspecto", "Tema ${prefs.palette.label} · ${prefs.mode.label} · estilo ${prefs.style.label}", Icons.Default.Palette) {
+            Text("Tema de color", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+            run {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Palette.entries.filter { it != Palette.DINAMICO || dynamicColorAvailable }.forEach { p ->
+                        PaletteSwatch(p, selected = prefs.palette == p) { vm.saveUi(prefs.copy(palette = p)) }
+                    }
+                }
+            }
+
+            Text("Modo", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+            run {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ThemeMode.entries.forEach { m ->
+                        FilterChip(selected = prefs.mode == m, onClick = { vm.saveUi(prefs.copy(mode = m)) }, label = { Text(m.label) })
+                    }
+                }
+            }
+
+            Text("Estilo", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+            run {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    UiStyle.entries.forEach { st ->
+                        StylePreview(st, selected = prefs.style == st) {
+                            // Como en Baby Registry: Píxel va con su fuente y al dejarlo se vuelve a Nunito.
+                            val font = when {
+                                st == UiStyle.PIXEL -> AppFont.PIXELIFY
+                                prefs.font == AppFont.PIXELIFY -> AppFont.NUNITO
+                                else -> prefs.font
+                            }
+                            vm.saveUi(prefs.copy(style = st, font = font))
+                        }
+                    }
+                }
+            }
+
+            Text("Fuente", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+            run {
+                AppFont.entries.forEach { f ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { vm.saveUi(prefs.copy(font = f)) }
+                            .background(if (prefs.font == f) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            f.label,
+                            fontFamily = f.family,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (prefs.font == f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text("Nómina 2.136,13 €", fontFamily = f.family, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (prefs.font == f) {
+                            Spacer(Modifier.width(8.dp))
+                            Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
+
+            Text("Fondo", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+            run {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Backdrop.entries.forEach { b ->
+                        BackdropPreview(b, selected = prefs.backdrop == b) { vm.saveUi(prefs.copy(backdrop = b)) }
+                    }
+                }
+            }
+
         }
         Spacer(Modifier.height(24.dp))
     }
