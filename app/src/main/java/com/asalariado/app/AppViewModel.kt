@@ -169,8 +169,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val import = MutableStateFlow(ImportState())
 
-    /** Mes al que debe saltar el calendario (p. ej. enero del año importado). */
-    val calendarJump = MutableStateFlow<java.time.YearMonth?>(null)
+    /** Mes que se ve en el calendario (empieza siempre en el actual). */
+    val calendarMonth = MutableStateFlow(java.time.YearMonth.now())
 
     /** Imagen recibida desde "Compartir" de otra app, pendiente de procesar. */
     val sharedImage = MutableStateFlow<Uri?>(null)
@@ -407,7 +407,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val gen = Rotation.generate(from, to, c, annual.days)
             dao.upsertDays(Rotation.merge(existing, gen, overwrite = false).map { it.toEntity() })
         }
-        calendarJump.value = java.time.YearMonth.of(annual.year, annual.months.min())
+        message.value = "Calendario laboral ${annual.year} guardado (${annual.months.size} meses)"
         clearImport()
     }
 

@@ -12,6 +12,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.LocalContentColor
@@ -147,6 +151,60 @@ fun SectionCard(
                 Text(title, style = MaterialTheme.typography.titleMedium)
             }
             content()
+        }
+    }
+}
+
+/** Dato grande con su título (p. ej. «Horas · 136 h»). */
+@Composable
+fun StatTile(title: String, value: String, sub: String? = null, modifier: Modifier = Modifier) {
+    Column(
+        modifier.clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleLarge, maxLines = 1, softWrap = false)
+        if (sub != null) Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    }
+}
+
+/** Tarjeta plegable: muestra el título y un resumen; al tocarla enseña el contenido. */
+@Composable
+fun ExpandableCard(
+    title: String,
+    summary: String,
+    icon: ImageVector? = null,
+    initiallyOpen: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    var open by rememberSaveable(title) { mutableStateOf(initiallyOpen) }
+    val ui = LocalUiStyle.current
+    val shape = MaterialTheme.shapes.large
+    Card(
+        Modifier.fillMaxWidth().styleShadow(shape, ui).animateContentSize(),
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (ui.flatCards) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        border = ui.cardBorder(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().clickable { open = !open }, verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) {
+                    Box(
+                        Modifier.size(34.dp).clip(ui.icon).background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(icon, null, Modifier.size(19.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+                    Spacer(Modifier.width(10.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    if (!open) Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, if (open) "Cerrar" else "Abrir")
+            }
+            if (open) content()
         }
     }
 }

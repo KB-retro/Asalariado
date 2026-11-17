@@ -70,7 +70,7 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
     ) {
         ScreenHeader("Contrato", "Tu contrato y convenio: con esto se calcula lo que deberías cobrar")
 
-        SectionCard("Salario", icon = Icons.Default.Euro) {
+        ExpandableCard("Salario", (d.escalon?.let { "Escalón $it · " } ?: "") + "jornal ${money(d.baseMonthly)} + prima ${money(d.bonusMonthly)}", Icons.Default.Euro, initiallyOpen = true) {
             EscalonPicker(d.escalon) { n ->
                 d = if (n == null) d.copy(escalon = null) else TablaSalarial.BELLOTA_2026.aplicar(d, n)
             }
@@ -153,7 +153,7 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
             )
         }
 
-        SectionCard("Jornada", icon = Icons.Default.Schedule) {
+        ExpandableCard("Jornada y turnos", "${hours(d.annualHours)} al año · horarios de mañana, tarde y noche", Icons.Default.Schedule) {
             NumberField("Horas anuales de convenio", d.annualHours, Modifier.fillMaxWidth(), "h") { d = d.copy(annualHours = it) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField("Jornada normal", d.normalDayHours, Modifier.weight(1f), "h") { d = d.copy(normalDayHours = it) }
@@ -184,7 +184,7 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
             }
         }
 
-        SectionCard("Pluses y horas extra", icon = Icons.Default.Star) {
+        ExpandableCard("Pluses y horas extra", "Sábado ${money(d.overtimeSaturdayPrice)}/h · noche ${money(d.nightShiftBonus)}/turno", Icons.Default.Star) {
             NumberField("Plus nocturnidad por hora (22–6 h)", d.nightBonusPerHour, Modifier.fillMaxWidth(), "€") { d = d.copy(nightBonusPerHour = it) }
             NumberField("Plus festivo por hora", d.holidayBonusPerHour, Modifier.fillMaxWidth(), "€") { d = d.copy(holidayBonusPerHour = it) }
             NumberField("Precio hora en sábado / festivo activable", d.activablePricePerHour, Modifier.fillMaxWidth(), "€") {
@@ -208,7 +208,7 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
             )
         }
 
-        SectionCard("Antigüedad", icon = Icons.Default.Schedule) {
+        ExpandableCard("Antigüedad", d.seniorityDate?.let { "${d.quinquenios(YearMonth.now())} quinquenios · ${money(d.quinquenioMonthly)}/mes cada uno" } ?: "Sin fecha de antigüedad", Icons.Default.Schedule) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 DateButton(d.seniorityDate ?: LocalDate.now(), Modifier.weight(1f), "Desde") { d = d.copy(seniorityDate = it) }
                 NumberField("Por quinquenio", d.quinquenioMonthly, Modifier.weight(1f), "€/mes") { d = d.copy(quinquenioMonthly = it) }
@@ -225,7 +225,7 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
             }
         }
 
-        SectionCard("Cómo descuenta la empresa", icon = Icons.Default.Euro) {
+        ExpandableCard("Cómo descuenta la empresa", if (d.discountsNextMonth) "Los descuentos llegan el mes siguiente" else "Los descuentos van en el mismo mes", Icons.Default.Euro) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(d.discountsNextMonth, { d = d.copy(discountsNextMonth = it) })
                 Text("Los descuentos (médico, libre disposición, asambleas, huelga) llegan en la nómina del mes siguiente",
@@ -233,7 +233,7 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
             }
         }
 
-        SectionCard("Permisos anuales", icon = Icons.Default.BeachAccess) {
+        ExpandableCard("Permisos anuales", "${d.vacationDays} vacaciones · ${d.personalDays} libre disp. · ${hours(d.medicalHoursPerYear)} médico", Icons.Default.BeachAccess) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField("Vacaciones", d.vacationDays.toDouble(), Modifier.weight(1f), "días") { d = d.copy(vacationDays = it.toInt()) }
                 NumberField("Libre disposición", d.personalDays.toDouble(), Modifier.weight(1f), "días") { d = d.copy(personalDays = it.toInt()) }

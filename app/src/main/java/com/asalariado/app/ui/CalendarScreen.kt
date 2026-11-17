@@ -11,6 +11,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -101,12 +102,8 @@ fun CalendarScreen(
     onImport: () -> Unit,
     onboarding: @Composable () -> Unit = {},
 ) {
-    var ymText by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
-    val ym = YearMonth.parse(ymText)
-    val jump by vm.calendarJump.collectAsState()
-    LaunchedEffect(jump) {
-        jump?.let { ymText = it.toString(); vm.calendarJump.value = null }
-    }
+    // El mes que se ve vive en el ViewModel: no se pierde al cambiar de pestaña y empieza en el actual.
+    val ym by vm.calendarMonth.collectAsState()
     var editing by remember { mutableStateOf<LocalDate?>(null) }
     var rotationOpen by remember { mutableStateOf(false) }
     // Punto rojo en los días con médico, paro o asamblea.
@@ -119,16 +116,37 @@ fun CalendarScreen(
     ) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ScreenHeader("Mis turnos", "Toca una semana o un día para cambiarlo") {
-                // Acciones en la cabecera para que no tapen el calendario.
-                IconButton(onClick = { rotationOpen = true }) { Icon(Icons.Default.Autorenew, contentDescription = "Rotación de turnos") }
-                FilledTonalIconButton(onClick = onImport) { Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Importar") }
+            // Cabecera: el mes con sus flechas y las acciones.
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { vm.calendarMonth.value = ym.minusMonths(1) }) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Mes anterior")
+                }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(monthName(ym.monthValue), style = MaterialTheme.typography.headlineSmall)
+                    Text("${ym.year}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                IconButton(onClick = { vm.calendarMonth.value = ym.plusMonths(1) }) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Mes siguiente")
+                }
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (ym != YearMonth.now()) {
+                    FilledTonalButton(onClick = { vm.calendarMonth.value = YearMonth.now() }) { Text("Hoy") }
+                }
+                Spacer(Modifier.weight(1f))
+                OutlinedButton(onClick = { rotationOpen = true }) {
+                    Icon(Icons.Default.Autorenew, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Rotación")
+                }
+                FilledTonalButton(onClick = onImport) {
+                    Icon(Icons.Default.AddPhotoAlternate, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Importar")
+                }
+            }
+
             onboarding()
-            TodayHero(days, calendar, c)
             if (c.rotationAnchor == null) RotationBanner(onPick = { vm.startRotationFrom(LocalDate.now(), it) })
+            if (ym == YearMonth.now()) TodayStrip(days, calendar, c)
 
             val ui = LocalUiStyle.current
             Card(
@@ -140,60 +158,19 @@ fun CalendarScreen(
                 border = ui.cardBorder(),
                 modifier = Modifier.fillMaxWidth().styleShadow(MaterialTheme.shapes.large, ui),
             ) {
-                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        FilledTonalIconButton(onClick = { ymText = ym.minusMonths(1).toString() }) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Mes anterior")
-                        }
-                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                            AnimatedContent(ym, label = "mes") { m ->
-                                Text("${monthName(m.monthValue)} ${m.year}", style = MaterialTheme.typography.titleLarge)
-                            }
-                            if (ym != YearMonth.now()) TextButton(onClick = { ymText = YearMonth.now().toString() }) { Text("Volver a hoy") }
-                        }
-                        FilledTonalIconButton(onClick = { ymText = ym.plusMonths(1).toString() }) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Mes siguiente")
-                        }
-                    }
-                    // Deslizar a los lados para cambiar de mes.
-                    var drag by remember { mutableFloatStateOf(0f) }
-                    AnimatedContent(
-                        targetState = ym,
-                        transitionSpec = {
-                            val dir = if (targetState > initialState) 1 else -1
-                            (slideInHorizontally { w -> dir * w } + fadeIn()) togetherWith (slideOutHorizontally { w -> -dir * w } + fadeOut())
-                        },
-                        modifier = Modifier.pointerInput(ymText) {
-                            detectHorizontalDragGestures(
-                                onDragEnd = {
-                                    if (drag > 120) ymText = ym.minusMonths(1).toString()
-                                    else if (drag < -120) ymText = ym.plusMonths(1).toString()
-                                    drag = 0f
-                                },
-                                onDragCancel = { drag = 0f },
-                            ) { _, dx -> drag += dx }
-                        },
-                        label = "grid",
-                    ) { shownYm ->
-                        MonthGrid(shownYm, days, calendar, medicalDates, onDay = { editing = it },
-                            actions = WeekActions(
-                                startFrom = { d, s -> vm.startRotationFrom(d, s) },
-                                swap = { vm.swapWeek(it) },
-                                set = { d, s -> vm.setWeek(d, s) },
-                            ),
-                        )
-                    }
+                Box(Modifier.padding(horizontal = 8.dp, vertical = 10.dp)) {
+                    MonthGrid(ym, days, calendar, medicalDates, onDay = { editing = it },
+                        actions = WeekActions(
+                            startFrom = { d, s -> vm.startRotationFrom(d, s) },
+                            swap = { vm.swapWeek(it) },
+                            set = { d, s -> vm.setWeek(d, s) },
+                        ),
+                    )
                 }
             }
-            Legend(showDayTypes = calendar.isNotEmpty())
             MonthSummaryCard(ym, days, calendar, medical, stoppages, c)
-            Text(
-                "Toca la columna «Sem» para decir «esta semana estoy de mañana» (las siguientes se alternan solas) " +
-                    "o para cambiar sólo esa semana. Toca un día para cambiarlo (vacaciones, horario distinto, festivo…).",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(24.dp))
+            Legend(showDayTypes = calendar.isNotEmpty())
+            Spacer(Modifier.height(16.dp))
         }
     }
 
@@ -245,9 +222,10 @@ private fun MonthGrid(
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Sem", Modifier.width(40.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
-            weekdayHeaders.forEach {
-                Text(it, Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.width(30.dp))
+            weekdayHeaders.forEachIndexed { i, w ->
+                Text(w, Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge,
+                    color = if (i >= 5) MaterialTheme.colorScheme.error.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         weeks.forEach { monday ->
@@ -255,6 +233,11 @@ private fun MonthGrid(
                 WeekChip(monday, days, actions)
                 (0L..6L).forEach { i ->
                     val d = monday.plusDays(i)
+                    // Los días de otros meses se dejan en blanco para no confundir.
+                    if (YearMonth.from(d) != ym) {
+                        Spacer(Modifier.weight(1f).height(54.dp))
+                        return@forEach
+                    }
                     DayCell(
                         date = d,
                         entry = days[d],
@@ -277,17 +260,18 @@ private fun WeekChip(monday: LocalDate, days: Map<LocalDate, DayEntry>, actions:
     val dominant = (0L..6L).mapNotNull { days[monday.plusDays(it)]?.shift }.filter { it.isWork }
         .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
     Box {
-        val (bg, fg) = if (dominant != null) shiftColors(dominant) else shiftColors(ShiftType.OFF)
+        // Columna estrecha: el turno de la semana; al tocarla se abre el menú de la semana.
+        val bg = if (dominant != null) shiftColors(dominant).first else MaterialTheme.colorScheme.surfaceVariant
         Box(
-            Modifier.width(40.dp).height(52.dp).clip(RoundedCornerShape(12.dp))
-                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline), RoundedCornerShape(12.dp))
-                .background(bg.copy(alpha = 0.35f))
-                .clickable { menu = true },
+            Modifier.width(30.dp).height(54.dp).clickable { menu = true },
             contentAlignment = Alignment.Center,
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("S${monday.get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR)}", fontSize = 10.sp)
-                Text(dominant?.code ?: "·", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Box(
+                Modifier.size(26.dp).clip(CircleShape).background(bg.copy(alpha = 0.3f))
+                    .border(1.5.dp, bg, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(dominant?.code ?: "·", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -334,63 +318,73 @@ private fun DayCell(
         typeColor != null -> typeColor to if (type == DayType.JORNADA_CORTA || type == DayType.JORNADA_4H || type == DayType.ACTIVABLE_FR) Color.Black else Color.White
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
+    val todayColor = MaterialTheme.colorScheme.primary
     Box(
-        modifier.height(52.dp).alpha(if (inMonth) 1f else 0.35f).clip(RoundedCornerShape(12.dp)).background(bg)
-            .then(if (isToday) Modifier.border(2.5.dp, MaterialTheme.colorScheme.onBackground, RoundedCornerShape(12.dp)) else Modifier)
+        modifier.height(54.dp).clip(RoundedCornerShape(12.dp)).background(bg)
+            .then(if (isToday) Modifier.border(3.dp, todayColor, RoundedCornerShape(12.dp)) else Modifier)
             .clickable(onClick = onClick)
             .padding(3.dp),
     ) {
-        Text("${date.dayOfMonth}", color = fg, fontSize = 11.sp, modifier = Modifier.align(Alignment.TopStart))
+        // Número del día; el de hoy, en un círculo del color principal para que se vea de un vistazo.
+        if (isToday) {
+            Box(
+                Modifier.align(Alignment.TopStart).size(20.dp).clip(CircleShape).background(todayColor),
+                contentAlignment = Alignment.Center,
+            ) { Text("${date.dayOfMonth}", color = MaterialTheme.colorScheme.onPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+        } else {
+            Text("${date.dayOfMonth}", color = fg, fontSize = 12.sp, modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp))
+        }
         if (shift != null) {
-            Text(shift.code, color = fg, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.align(Alignment.Center))
+            Text(shift.code, color = fg, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.align(Alignment.Center).padding(top = 6.dp))
         } else if (type != null && type.code.isNotEmpty()) {
-            Text(type.code, color = fg, fontSize = 12.sp, modifier = Modifier.align(Alignment.Center))
+            Text(type.code, color = fg, fontSize = 12.sp, modifier = Modifier.align(Alignment.Center).padding(top = 6.dp))
         }
         // Franja inferior con el tipo de día del calendario laboral cuando hay turno.
         if (shift != null && typeColor != null) {
             Box(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.8f).height(5.dp)
-                    .clip(RoundedCornerShape(3.dp)).background(typeColor)
-                    .border(0.5.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(3.dp)),
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.7f).height(4.dp)
+                    .clip(RoundedCornerShape(2.dp)).background(typeColor),
             )
         }
-        if (entry?.start != null || entry?.holidayWorked == true) {
-            Text(if (entry?.holidayWorked == true) "F" else "⏱", color = fg, fontSize = 9.sp, modifier = Modifier.align(Alignment.BottomStart))
-        }
         if (hasMedical) {
-            Box(Modifier.align(Alignment.TopEnd).size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error))
+            Box(Modifier.align(Alignment.TopEnd).padding(2.dp).size(7.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error))
         }
     }
 }
 
-/** Tarjeta de «hoy»: turno de hoy, de esta semana y de la siguiente. */
+/** Franja de «hoy»: el turno de hoy con su horario y el de la semana que viene, en poco espacio. */
 @Composable
-private fun TodayHero(days: Map<LocalDate, DayEntry>, calendar: Map<LocalDate, DayType>, c: Conditions) {
+private fun TodayStrip(days: Map<LocalDate, DayEntry>, calendar: Map<LocalDate, DayType>, c: Conditions) {
     val today = LocalDate.now()
     val entry = days[today]
-    fun weekShift(monday: LocalDate) = (0L..6L).mapNotNull { days[monday.plusDays(it)]?.shift }.filter { it.isWork }
-        .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
     val monday = Rotation.mondayOf(today)
-    val thisWeek = weekShift(monday)
-    val nextWeek = weekShift(monday.plusWeeks(1))
+    val nextWeek = (0L..6L).mapNotNull { days[monday.plusWeeks(1).plusDays(it)]?.shift }.filter { it.isWork }
+        .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
     val main = entry?.shift
-    val base = main?.let { shiftColors(it).first }?.takeIf { main.isWork } ?: MaterialTheme.colorScheme.primary
-    HeroCard(colors = listOf(base, lerp(base, MaterialTheme.colorScheme.primary, 0.55f))) {
-        Text(today.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", ES)).replaceFirstChar { it.uppercase() },
-            style = MaterialTheme.typography.labelLarge)
-        val title = when {
-            main == null -> calendar[today]?.label ?: "Sin turno apuntado"
-            main.isWork -> "Turno de ${main.label.lowercase()}"
-            else -> main.label
+    val color = main?.let { shiftColors(it).first } ?: MaterialTheme.colorScheme.primary
+    Row(
+        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
+            Text(main?.code ?: "·", color = main?.let { shiftColors(it).second } ?: MaterialTheme.colorScheme.onPrimary,
+                fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
-        Text(title, style = MaterialTheme.typography.headlineSmall)
-        entry?.effectiveHours(c)?.let { h ->
-            Text("${h.start.hhmm()} – ${h.end.hhmm()} · ${hours(com.asalariado.core.hoursBetween(h.start, h.end))}",
-                style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Hoy, " + today.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d", ES)),
+                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val title = when {
+                main == null -> calendar[today]?.label ?: "Sin turno apuntado"
+                main.isWork -> main.label + (entry?.effectiveHours(c)?.let { " · ${it.start.hhmm()}–${it.end.hhmm()}" } ?: "")
+                else -> main.label
+            }
+            Text(title, style = MaterialTheme.typography.titleMedium)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-            Pill("Esta semana: ${thisWeek?.label ?: "—"}", LocalContentColor.current.copy(alpha = 0.14f))
-            Pill("Siguiente: ${nextWeek?.label ?: "—"}", LocalContentColor.current.copy(alpha = 0.14f))
+        if (nextWeek != null) Column(horizontalAlignment = Alignment.End) {
+            Text("Próx. semana", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(nextWeek.label, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -415,6 +409,15 @@ private fun RotationBanner(onPick: (ShiftType) -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Legend(showDayTypes: Boolean) {
+    var open by remember { mutableStateOf(false) }
+    TextButton(onClick = { open = !open }) { Text(if (open) "Ocultar leyenda" else "Ver leyenda y ayuda") }
+    if (!open) return
+    Text(
+        "Toca un día para cambiarlo (turno, horario, vacaciones, médico, horas extra…). Toca el círculo de la izquierda " +
+            "de una semana para decir «esta semana estoy de mañana/tarde» o cambiar sólo esa semana.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     if (showDayTypes) {
         Text("Calendario laboral (franja inferior)", style = MaterialTheme.typography.labelMedium)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -456,7 +459,14 @@ private fun MonthSummaryCard(
     val s = remember(ym, days, calendar, medical, stoppages, c) {
         Payroll.month(ym, days.values, medical, c, null, calendar, stoppages = stoppages)
     }
-    SectionCard("Resumen de ${monthName(ym.monthValue).lowercase()}", icon = Icons.Default.Insights) {
+    var detail by remember { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        StatTile("Horas", hours(s.workedHours), if (s.calendarHours > 0) "de ${hours(s.calendarHours)}" else null, Modifier.weight(1f))
+        StatTile("Días", "${s.workedDays}", "trabajados", Modifier.weight(1f))
+        StatTile("Bruto", money(s.expectedGross).replace(",00", ""), "estimado", Modifier.weight(1f))
+    }
+    TextButton(onClick = { detail = !detail }) { Text(if (detail) "Ocultar detalle del mes" else "Ver detalle del mes") }
+    if (detail) SectionCard("Detalle de ${monthName(ym.monthValue).lowercase()}", icon = Icons.Default.Insights) {
         KeyValue("Días trabajados", "${s.workedDays}")
         KeyValue("Horas trabajadas", hours(s.workedHours))
         if (s.calendarHours > 0) KeyValue("Horas según calendario laboral", hours(s.calendarHours))
