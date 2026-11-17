@@ -5,7 +5,9 @@ import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
@@ -63,14 +65,22 @@ class ScreenshotTest {
     private fun shoot(prefs: UiPrefs, suffix: String) {
         UiPrefsStore(ctx).save(prefs)
         val dir = File(ctx.getExternalFilesDir(null), "screens").apply { mkdirs() }
+        fun save(name: String) {
+            compose.waitForIdle()
+            Thread.sleep(800)
+            val bmp = compose.onRoot().captureToImage().asAndroidBitmap()
+            File(dir, "$name-$suffix.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
         ActivityScenario.launch(MainActivity::class.java).use {
+            // Primera captura nada más abrir (sirve también para ver qué hay si algo falla).
+            save("inicio")
             val tabs = listOf("Calendario", "Médico", "Nómina", "Condiciones", "Ajustes")
             for (t in tabs) {
-                compose.onNodeWithContentDescription(t).performClick()
-                compose.waitForIdle()
-                Thread.sleep(600)
-                val bmp = compose.onRoot().captureToImage().asAndroidBitmap()
-                File(dir, "${t.lowercase()}-$suffix.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                val byDesc = compose.onAllNodes(hasContentDescription(t), useUnmergedTree = true)
+                val target = if (byDesc.fetchSemanticsNodes().isNotEmpty()) byDesc.onFirst()
+                else compose.onAllNodes(hasText(t), useUnmergedTree = true).onFirst()
+                runCatching { target.performClick() }
+                save(t.lowercase())
             }
         }
     }
