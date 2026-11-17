@@ -9,6 +9,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.glance.appwidget.updateAll
+import androidx.lifecycle.lifecycleScope
+import com.asalariado.app.widget.ShiftWidget
+import com.asalariado.app.work.Scheduler
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -58,7 +63,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) handleShare(intent)
+        Scheduler.schedule(this)
         setContent { App(vm) }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Al salir de la app se refresca el widget con los últimos cambios.
+        lifecycleScope.launch { runCatching { ShiftWidget().updateAll(this@MainActivity) } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -136,7 +148,7 @@ private fun App(vm: AppViewModel) {
                                 NavigationBarItem(
                                     selected = tab == i,
                                     onClick = { tab = i },
-                                    icon = { Icon(t.icon, null) },
+                                    icon = { Icon(t.icon, contentDescription = t.label) },
                                     label = { Text(t.label, maxLines = 1) },
                                     alwaysShowLabel = false,
                                 )

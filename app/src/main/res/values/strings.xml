@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Asalariado</string>
+    <string name="widget_description">Tu turno de hoy y de esta semana</string>
 </resources>

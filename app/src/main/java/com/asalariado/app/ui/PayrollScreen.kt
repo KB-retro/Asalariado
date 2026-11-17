@@ -46,6 +46,14 @@ import com.asalariado.app.PayslipImport
 import com.asalariado.app.ImportedPayslip
 import androidx.compose.foundation.lazy.itemsIndexed
 import com.asalariado.core.Conditions
+import com.asalariado.app.data.Report
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.content.Intent
 import androidx.core.content.FileProvider
 import androidx.compose.ui.platform.LocalContext
@@ -188,6 +196,35 @@ fun PayrollScreen(
             Button(onClick = { picker.launch(arrayOf("application/pdf", "image/*")) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Importar nóminas (PDF o capturas, varias a la vez)")
             }
+        }
+        item {
+            SectionCard("Gráficas", icon = Icons.Default.BarChart) {
+                Text("Neto por mes", style = MaterialTheme.typography.labelLarge)
+                MonthBars(
+                    expected = y.months.map { it.expectedNet },
+                    actual = y.months.map { it.payslip?.net },
+                    expectedLabel = "Esperado", actualLabel = "Cobrado",
+                )
+                Text("Horas por mes", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                MonthBars(
+                    expected = y.months.map { maxOf(it.calendarHours, it.countedHours) },
+                    actual = y.months.map { it.countedHours.takeIf { h -> h > 0 } },
+                    expectedLabel = if (y.calendarHours > 0) "Calendario" else "Total", actualLabel = "Trabajadas + médico",
+                )
+            }
+        }
+        item {
+            val ctx = LocalContext.current
+            val scope = rememberCoroutineScope()
+            OutlinedButton(onClick = {
+                scope.launch {
+                    val file = withContext(Dispatchers.IO) { Report.yearPdf(ctx, y, c) }
+                    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
+                    val send = Intent(Intent.ACTION_SEND).setType("application/pdf").putExtra(Intent.EXTRA_STREAM, uri)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    runCatching { ctx.startActivity(Intent.createChooser(send, "Compartir informe $year")) }
+                }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Informe PDF de $year (para compartir)") }
         }
         items(y.months, key = { it.month }) { m -> MonthRow(m, onExtraClick = { editingExtra = m.extra }) { editing = m } }
         item { Spacer(Modifier.height(24.dp)) }

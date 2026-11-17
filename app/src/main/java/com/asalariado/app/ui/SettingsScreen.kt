@@ -30,6 +30,14 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material.icons.filled.Notifications
+import android.Manifest
+import android.content.Intent
+import android.os.Build
+import androidx.compose.material3.Switch
+import androidx.compose.ui.platform.LocalContext
+import com.asalariado.app.work.AutoPrefs
+import com.asalariado.app.work.Scheduler
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -173,6 +181,28 @@ fun SettingsScreen(vm: AppViewModel, prefs: UiPrefs) {
             }
         }
 
+        SectionCard("Avisos y widget", icon = Icons.Default.Notifications) {
+            val ctx = LocalContext.current
+            var on by remember { mutableStateOf(AutoPrefs.notificationsOn(ctx)) }
+            val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                on = granted
+                AutoPrefs.setNotifications(ctx, granted)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(on, { want ->
+                    if (want && Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    else { on = want; AutoPrefs.setNotifications(ctx, want) }
+                })
+                Spacer(Modifier.width(10.dp))
+                Text("Avisarme a las 20:00 si mañana cambio de turno, el día de la paga extra y si falta importar la nómina",
+                    style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(
+                "Widget: mantén pulsado el fondo de la pantalla de inicio → Widgets → Asalariado para ver tu turno de hoy y el de la semana.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
         SectionCard("Copia de seguridad", icon = Icons.Default.Backup) {
             Text(
                 "Guarda todos tus datos (turnos, calendario laboral, médico, nóminas y condiciones) en un archivo. " +
@@ -187,6 +217,34 @@ fun SettingsScreen(vm: AppViewModel, prefs: UiPrefs) {
                     Icon(Icons.Default.Restore, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Restaurar")
                 }
             }
+            val ctx = LocalContext.current
+            var folder by remember { mutableStateOf(AutoPrefs.backupFolder(ctx)) }
+            val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+                if (uri != null) {
+                    ctx.contentResolver.takePersistableUriPermission(
+                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                    AutoPrefs.setBackupFolder(ctx, uri)
+                    folder = uri
+                    Scheduler.schedule(ctx)
+                }
+            }
+            Text("Copia automática semanal", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+            Text(
+                if (folder == null) "Elige una carpeta (mejor una que se sincronice con la nube) y la app guardará ahí una copia cada semana."
+                else "Carpeta elegida. Última copia: ${AutoPrefs.lastBackup(ctx) ?: "pendiente"}.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { folderPicker.launch(null) }) { Text(if (folder == null) "Elegir carpeta" else "Cambiar carpeta") }
+                if (folder != null) TextButton(onClick = {
+                    AutoPrefs.setBackupFolder(ctx, null); folder = null; Scheduler.schedule(ctx)
+                }) { Text("Desactivar") }
+            }
+            Text(
+                "Además, Android guarda los datos de la app en tu copia de Google si la tienes activada en el móvil.",
+                style = MaterialTheme.typography.labelSmall,
+            )
         }
         Spacer(Modifier.height(24.dp))
     }
