@@ -109,16 +109,34 @@ object AnnualCalendarParser {
             val row = rows.lastOrNull()
             if (row != null && abs(row.first().cy - hd.cy) < h) row += hd else rows += mutableListOf(hd)
         }
-        val grid = rows.filter { it.size >= 2 }.flatten()
         val cols = rows.maxOf { it.size }
-        if (cols < 2 || grid.size < 4) return headers
-        val rowY = grid.groupBy { (it.month - 1) / cols }.mapValues { (_, l) -> l.map { it.cy }.median() }
-        val colX = grid.groupBy { (it.month - 1) % cols }.mapValues { (_, l) -> l.map { it.cx }.median() }
+        val grid = rows.filter { it.size >= 2 }.flatten().toMutableList()
+        if (cols < 2 || grid.size < 3) return headers
         val w = grid.map { (it.item.right - it.item.left).toDouble() }.median()
+        fun colX() = grid.groupBy { (it.month - 1) % cols }.mapValues { (_, l) -> l.map { it.cx }.median() }
+        fun rowY() = grid.groupBy { (it.month - 1) / cols }.mapValues { (_, l) -> l.map { it.cy }.median() }
+        // Un mes que sale solo en su fila (porque el OCR no leyó sus vecinos) también vale si cae en
+        // su columna; así no se confunde con la tabla resumen (meses en una sola columna, más abajo).
+        run {
+            val cx = colX(); val ry = rowY()
+            for (hd in headers) {
+                if (hd in grid || grid.any { it.month == hd.month }) continue
+                val x = cx[(hd.month - 1) % cols] ?: continue
+                val y = ry[(hd.month - 1) / cols]
+                if (abs(hd.cx - x) < w * 0.5 && (y == null || abs(hd.cy - y) < h * 1.5)) grid += hd
+            }
+        }
+        val colX = colX()
+        val rowY = rowY()
+        // Filas o columnas sin ningún título leído: se sacan de la separación regular entre las demás.
+        val colFit = if (colX.size >= 2) leastSquares(colX.map { (k, v) -> k.toDouble() to v }) else null
+        val rowFit = if (rowY.size >= 2) leastSquares(rowY.map { (k, v) -> k.toDouble() to v }) else null
         val present = grid.map { it.month }.toSet()
         val inferred = (1..12).filter { it !in present }.mapNotNull { m ->
-            val y = rowY[(m - 1) / cols] ?: return@mapNotNull null
-            val x = colX[(m - 1) % cols] ?: return@mapNotNull null
+            val r = (m - 1) / cols
+            val c = (m - 1) % cols
+            val y = rowY[r] ?: rowFit?.let { (a, b) -> a + b * r } ?: return@mapNotNull null
+            val x = colX[c] ?: colFit?.let { (a, b) -> a + b * c } ?: return@mapNotNull null
             Header(m, TextItem(MONTHS[m - 1], (x - w / 2).toInt(), (y - h / 2).toInt(), (x + w / 2).toInt(), (y + h / 2).toInt()))
         }
         return headers + inferred
