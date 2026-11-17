@@ -54,7 +54,7 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ScreenHeader("Condiciones", "Tu contrato y convenio: con esto se calcula lo que deberías cobrar")
+        ScreenHeader("Contrato", "Tu contrato y convenio: con esto se calcula lo que deberías cobrar")
 
         SectionCard("Salario", icon = Icons.Default.Euro) {
             EscalonPicker(d.escalon) { n ->
