@@ -5,6 +5,11 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.asalariado.app.data.AppDatabase
+import com.asalariado.app.data.Backup
+import com.asalariado.app.ui.UiPrefs
+import com.asalariado.app.ui.UiPrefsStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.asalariado.app.data.ConditionsStore
 import com.asalariado.app.data.Ocr
 import com.asalariado.app.data.toEntity
@@ -61,8 +66,41 @@ data class PayslipImport(
 data class ImportRow(val day: ParsedDay, val include: Boolean = true)
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
-    private val dao = AppDatabase.get(app).dao()
+    private val db = AppDatabase.get(app)
+    private val dao = db.dao()
     private val store = ConditionsStore(app)
+    private val uiStore = UiPrefsStore(app)
+
+    /** Aspecto de la app (tema, modo claro/oscuro, fondo). */
+    val ui: StateFlow<UiPrefs> = uiStore.state
+    fun saveUi(p: UiPrefs) = uiStore.save(p)
+
+    /** Mensaje breve para mostrar al usuario (copias de seguridad…). */
+    val message = MutableStateFlow<String?>(null)
+
+    fun exportBackup(uri: Uri) = viewModelScope.launch {
+        message.value = try {
+            val json = Backup.export(db, ConditionsStore.toJson(conditions.value))
+            withContext(Dispatchers.IO) {
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+            }
+            "Copia de seguridad guardada"
+        } catch (e: Exception) {
+            "No se pudo guardar la copia: ${e.message}"
+        }
+    }
+
+    fun importBackup(uri: Uri) = viewModelScope.launch {
+        message.value = try {
+            val json = withContext(Dispatchers.IO) {
+                getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
+            } ?: error("no se pudo abrir el archivo")
+            Backup.import(db, json)?.let { store.save(ConditionsStore.fromJson(it)) }
+            "Datos restaurados"
+        } catch (e: Exception) {
+            "No se pudo restaurar: ${e.message}"
+        }
+    }
 
     val conditions: StateFlow<Conditions> = store.state
 

@@ -1,6 +1,26 @@
 package com.asalariado.app.ui
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,8 +36,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -65,7 +83,7 @@ fun parseNum(s: String): Double? = s.trim().replace(',', '.').toDoubleOrNull()
 /** Colores por turno (fondo, texto). */
 @Composable
 fun shiftColors(s: ShiftType): Pair<Color, Color> {
-    val dark = isSystemInDarkTheme()
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val base = when (s) {
         ShiftType.MORNING -> Color(0xFFF6C744)
         ShiftType.AFTERNOON -> Color(0xFF4F8FD9)
@@ -99,22 +117,84 @@ fun dayTypeColor(t: DayType): Color = when (t) {
 }
 
 @Composable
-fun AsalariadoTheme(content: @Composable () -> Unit) {
-    val scheme = if (isSystemInDarkTheme()) {
-        darkColorScheme(primary = Color(0xFF7FD3BE), secondary = Color(0xFFF2B84B), primaryContainer = Color(0xFF1E5B4F))
-    } else {
-        lightColorScheme(primary = Color(0xFF1E5B4F), secondary = Color(0xFFB7791F), primaryContainer = Color(0xFFBDEBDD))
-    }
-    MaterialTheme(colorScheme = scheme, content = content)
-}
-
-@Composable
-fun SectionCard(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Card(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+fun SectionCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    content: @Composable () -> Unit,
+) {
+    Card(
+        modifier.fillMaxWidth().animateContentSize(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) {
+                    Box(
+                        Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+                    Spacer(Modifier.width(10.dp))
+                }
+                Text(title, style = MaterialTheme.typography.titleMedium)
+            }
             content()
         }
+    }
+}
+
+/** Título grande de cada pantalla. */
+@Composable
+fun ScreenHeader(title: String, subtitle: String? = null, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
+    Row(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        trailing()
+    }
+}
+
+/** Selector de año compacto (‹ 2026 ›). */
+@Composable
+fun YearSwitcher(year: Int, onChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        FilledTonalIconButton(onClick = { onChange(year - 1) }, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Año anterior")
+        }
+        Text("$year", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 8.dp))
+        FilledTonalIconButton(onClick = { onChange(year + 1) }, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Año siguiente")
+        }
+    }
+}
+
+/** Tarjeta destacada con degradado de color. */
+@Composable
+fun HeroCard(
+    modifier: Modifier = Modifier,
+    colors: List<Color> = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Box(
+        modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge)
+            .background(Brush.linearGradient(colors))
+            .padding(20.dp)
+            .animateContentSize(),
+    ) {
+        CompositionLocalProvider(LocalContentColor provides Color.White) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
+        }
+    }
+}
+
+/** Pastilla pequeña con texto (p. ej. una diferencia de importe). */
+@Composable
+fun Pill(text: String, color: Color, onColor: Color = Color.White) {
+    Box(Modifier.clip(CircleShape).background(color).padding(horizontal = 10.dp, vertical = 4.dp)) {
+        Text(text, color = onColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
     }
 }
 

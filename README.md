@@ -38,6 +38,9 @@ App Android para llevar el control de tus **turnos, horas y salario** y comproba
 - **Condiciones**: salario bruto anual, pagas (12/14/15, prorrateadas o no), horas anuales, días laborables,
   horario de cada turno, pluses, precio de la hora extra, vacaciones, asuntos propios y horas de médico.
 
+- **Ajustes**: 7 temas de color (incluido el del fondo de pantalla en Android 12+), modo claro/oscuro
+  y 5 fondos (liso, degradado, aurora, ondas, puntos); copia de seguridad.
+
 Todos los datos se guardan sólo en el móvil.
 
 ## Instalar el APK
@@ -45,6 +48,14 @@ Todos los datos se guardan sólo en el móvil.
 Cada push compila el APK en GitHub Actions (pestaña **Actions** → último «Android APK» → artefacto
 `Asalariado-apk`). Descomprime el zip, pasa `Asalariado.apk` al móvil y ábrelo
 (hay que permitir «instalar apps de origen desconocido»).
+
+## Actualizar sin perder datos (firma)
+
+Para que cada versión se instale encima de la anterior, el APK se firma siempre con la misma clave.
+Se guarda en los secretos del repositorio (Settings → Secrets and variables → Actions):
+`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` y `KEY_PASSWORD`. Sin ellos, el workflow firma
+con una clave temporal y avisa. Además, en **Ajustes → Copia de seguridad** puedes guardar y restaurar
+todos los datos en un archivo.
 
 ## Compilar en local
 

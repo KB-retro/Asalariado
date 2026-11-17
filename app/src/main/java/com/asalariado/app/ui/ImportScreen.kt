@@ -42,6 +42,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -83,8 +84,10 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Condit
     LaunchedEffect(initialUri) { initialUri?.let { vm.runOcr(listOf(it)) } }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text("Importar") },
                 navigationIcon = {
                     IconButton(onClick = { vm.clearImport(); onClose() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") }

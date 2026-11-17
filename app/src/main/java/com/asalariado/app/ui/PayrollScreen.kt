@@ -1,5 +1,9 @@
 package com.asalariado.app.ui
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BeachAccess
+import androidx.compose.material.icons.filled.Euro
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -76,16 +80,30 @@ fun PayrollScreen(
     val expectedToDate = Payroll.expectedHoursToDate(year, today, c)
     val countedToDate = y.months.filter { year < today.year || it.month <= today.monthValue }.sumOf { it.countedHours }
 
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { year-- }) { Text("‹") }
-                Text("Control $year", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = { year++ }) { Text("›") }
+            ScreenHeader("Nómina", "¿Cobras lo que te corresponde?") { YearSwitcher(year) { year = it } }
+        }
+        item {
+            val m = y.months[(if (year == today.year) today.monthValue else 12) - 1]
+            HeroCard(colors = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)) {
+                Text("${monthName(m.month)} ${m.year} · neto esperado", style = MaterialTheme.typography.labelLarge)
+                Text(money(m.expectedNet), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                Text("Bruto ${money(m.expectedGross)}", style = MaterialTheme.typography.bodyLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    val d = m.diffNet ?: m.diffGross
+                    when {
+                        d == null -> Pill("Sin nómina apuntada", Color.White.copy(alpha = 0.22f))
+                        abs(d) < 1 -> Pill("✓ Cuadra con tu nómina", Color(0xFF2E7D32))
+                        d < 0 -> Pill("Te faltan ${money(-d)}", Color(0xFFC62828))
+                        else -> Pill("Cobras ${money(d)} de más", Color.White.copy(alpha = 0.3f))
+                    }
+                    if (y.monthsWithPayslip > 0) Pill("Año: ${money(y.diffNet)}", Color.White.copy(alpha = 0.22f))
+                }
             }
         }
         item {
-            SectionCard("Jornada anual") {
+            SectionCard("Jornada anual", icon = Icons.Default.Schedule) {
                 KeyValue("Horas del convenio", hours(y.annualHours))
                 if (y.calendarHours > 0) KeyValue("Horas según calendario laboral", hours(y.calendarHours))
                 KeyValue("Horas en calendario (trabajo + médico)", hours(y.countedHours))
@@ -112,7 +130,7 @@ fun PayrollScreen(
             }
         }
         item {
-            SectionCard("Permisos") {
+            SectionCard("Permisos", icon = Icons.Default.BeachAccess) {
                 KeyValue("Vacaciones", "${y.vacationUsed} de ${y.vacationAllowed} días",
                     if (y.vacationUsed > y.vacationAllowed) MaterialTheme.colorScheme.error else Color.Unspecified)
                 KeyValue("Asuntos propios / libre disposición", "${y.personalUsed} de ${y.personalAllowed} días")
@@ -127,7 +145,7 @@ fun PayrollScreen(
             }
         }
         item {
-            SectionCard("Salario") {
+            SectionCard("Salario", icon = Icons.Default.Euro) {
                 KeyValue("Bruto anual esperado", money(y.expectedGross))
                 KeyValue("Neto anual estimado", money(y.expectedNet))
                 if (y.monthsWithPayslip > 0) {

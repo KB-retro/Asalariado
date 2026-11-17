@@ -17,7 +17,21 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Tests de la lógica (core)
         run: ./gradlew :core:test --no-daemon
+      - name: Preparar clave de firma
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/asalariado.jks"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/asalariado.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Falta el secreto KEYSTORE_BASE64: el APK se firma con una clave temporal y no se podrá instalar encima de otra versión."
+          fi
       - name: Compilar APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease --no-daemon
       - name: Copiar APK
         run: cp app/build/outputs/apk/release/app-release.apk Asalariado.apk

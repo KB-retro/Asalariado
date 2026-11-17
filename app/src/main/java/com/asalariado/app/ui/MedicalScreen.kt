@@ -1,5 +1,7 @@
 package com.asalariado.app.ui
 
+import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +22,9 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -33,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.asalariado.app.AppViewModel
@@ -52,6 +58,7 @@ fun MedicalScreen(vm: AppViewModel, medical: List<MedicalVisit>, c: Conditions) 
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
+        containerColor = Color.Transparent,
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { editing = MedicalVisit(date = LocalDate.now(), start = LocalTime.of(9, 0), end = LocalTime.of(11, 0)) },
@@ -61,18 +68,36 @@ fun MedicalScreen(vm: AppViewModel, medical: List<MedicalVisit>, c: Conditions) 
         },
     ) { pad ->
         LazyColumn(
-            Modifier.padding(pad).fillMaxSize().padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.padding(pad).fillMaxSize().padding(horizontal = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { year-- }) { Text("‹") }
-                    Text("Horas de médico $year", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { year++ }) { Text("›") }
+                ScreenHeader("Médico", "Citas y horas de permiso") { YearSwitcher(year) { year = it } }
+            }
+            item {
+                val allowed = c.medicalHoursPerYear
+                HeroCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                progress = { if (allowed > 0) (used / allowed).toFloat().coerceIn(0f, 1f) else 0f },
+                                modifier = Modifier.size(84.dp),
+                                color = Color.White,
+                                trackColor = Color.White.copy(alpha = 0.25f),
+                                strokeWidth = 8.dp,
+                            )
+                            Text(hours(used), style = MaterialTheme.typography.titleMedium)
+                        }
+                        Column(Modifier.padding(start = 18.dp)) {
+                            Text("Bolsa de médico general / acompañante", style = MaterialTheme.typography.labelLarge)
+                            Text("Te quedan ${hours((allowed - used).coerceAtLeast(0.0))}", style = MaterialTheme.typography.headlineSmall)
+                            Text("de ${hours(allowed)} · especialista: ${hours(specialist)}", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
                 }
             }
             item {
-                SectionCard("Médico general / acompañante") {
+                SectionCard("Médico general / acompañante", icon = Icons.Default.LocalHospital) {
                     val allowed = c.medicalHoursPerYear
                     KeyValue("Usadas", "${hours(used)} de ${hours(allowed)}")
                     if (allowed > 0) LinearProgressIndicator(
@@ -90,7 +115,7 @@ fun MedicalScreen(vm: AppViewModel, medical: List<MedicalVisit>, c: Conditions) 
                 }
             }
             item {
-                SectionCard("Especialista (propio)") {
+                SectionCard("Especialista (propio)", icon = Icons.Default.MedicalServices) {
                     KeyValue("Horas este año", hours(specialist))
                     Text("Sin límite de horas.", style = MaterialTheme.typography.bodySmall)
                 }

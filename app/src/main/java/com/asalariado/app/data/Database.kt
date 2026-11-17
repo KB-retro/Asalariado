@@ -130,6 +130,18 @@ interface AppDao {
 
     @Query("DELETE FROM payslips WHERE year = :year AND month = :month")
     suspend fun deletePayslip(year: Int, month: Int)
+
+    // ---- Copia de seguridad ----
+    @Query("SELECT * FROM days") suspend fun daysOnce(): List<DayEntity>
+    @Query("SELECT * FROM medical") suspend fun medicalOnce(): List<MedicalEntity>
+    @Query("SELECT * FROM payslips") suspend fun payslipsOnce(): List<PayslipEntity>
+    @Query("SELECT * FROM calendar_days") suspend fun calendarOnce(): List<CalendarDayEntity>
+    @Query("DELETE FROM days") suspend fun clearDays()
+    @Query("DELETE FROM medical") suspend fun clearMedical()
+    @Query("DELETE FROM payslips") suspend fun clearPayslips()
+    @Query("DELETE FROM calendar_days") suspend fun clearCalendar()
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertMedical(list: List<MedicalEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertPayslips(list: List<PayslipEntity>)
 }
 
 @Database(

@@ -15,6 +15,20 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Euro
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import com.asalariado.app.ui.SettingsScreen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -44,7 +58,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) handleShare(intent)
-        setContent { AsalariadoTheme { App(vm) } }
+        setContent { App(vm) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -68,6 +82,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     Medical("Médico", Icons.Default.LocalHospital),
     Payroll("Nómina", Icons.Default.Euro),
     Conditions("Condiciones", Icons.Default.Tune),
+    Settings("Ajustes", Icons.Default.Settings),
 }
 
 @Composable
@@ -78,10 +93,13 @@ private fun App(vm: AppViewModel) {
     val payslips by vm.payslips.collectAsState()
     val conditions by vm.conditions.collectAsState()
     val shared by vm.sharedImage.collectAsState()
+    val ui by vm.ui.collectAsState()
+    val message by vm.message.collectAsState()
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var importing by rememberSaveable { mutableStateOf(false) }
     var importUri by rememberSaveable { mutableStateOf<String?>(null) }
+    val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(shared) {
         shared?.let {
@@ -90,34 +108,58 @@ private fun App(vm: AppViewModel) {
             vm.sharedImage.value = null
         }
     }
-
-    if (importing) {
-        BackHandler { vm.clearImport(); importing = false; importUri = null }
-        ImportScreen(vm, days, conditions, importUri?.let(Uri::parse)) { importing = false; importUri = null }
-        return
+    LaunchedEffect(message) {
+        message?.let { snackbar.showSnackbar(it); vm.message.value = null }
     }
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                Tab.entries.forEachIndexed { i, t ->
-                    NavigationBarItem(
-                        selected = tab == i,
-                        onClick = { tab = i },
-                        icon = { Icon(t.icon, null) },
-                        label = { Text(t.label) },
-                    )
+    AsalariadoTheme(ui) {
+        AnimatedContent(
+            targetState = importing,
+            transitionSpec = {
+                (slideInVertically { it / 6 } + fadeIn()) togetherWith (fadeOut())
+            },
+            label = "import",
+        ) { isImporting ->
+            if (isImporting) {
+                BackHandler { vm.clearImport(); importing = false; importUri = null }
+                ImportScreen(vm, days, conditions, importUri?.let(Uri::parse)) { importing = false; importUri = null }
+            } else {
+                Scaffold(
+                    containerColor = Color.Transparent,
+                    snackbarHost = { SnackbarHost(snackbar) },
+                    bottomBar = {
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.95f)) {
+                            Tab.entries.forEachIndexed { i, t ->
+                                NavigationBarItem(
+                                    selected = tab == i,
+                                    onClick = { tab = i },
+                                    icon = { Icon(t.icon, null) },
+                                    label = { Text(t.label, maxLines = 1) },
+                                    alwaysShowLabel = false,
+                                )
+                            }
+                        }
+                    },
+                ) { pad ->
+                    AnimatedContent(
+                        targetState = tab,
+                        modifier = Modifier.padding(pad),
+                        transitionSpec = {
+                            val dir = if (targetState > initialState) 1 else -1
+                            (slideInHorizontally { w -> dir * w / 5 } + fadeIn()) togetherWith
+                                (slideOutHorizontally { w -> -dir * w / 5 } + fadeOut())
+                        },
+                        label = "tabs",
+                    ) { t ->
+                        when (Tab.entries[t]) {
+                            Tab.Calendar -> CalendarScreen(vm, days, calendar, medical, conditions, onImport = { importing = true })
+                            Tab.Medical -> MedicalScreen(vm, medical, conditions)
+                            Tab.Payroll -> PayrollScreen(vm, days, calendar, medical, payslips, conditions, vm::savePayslip)
+                            Tab.Conditions -> ConditionsScreen(conditions, vm::saveConditions)
+                            Tab.Settings -> SettingsScreen(vm, ui)
+                        }
+                    }
                 }
-            }
-        },
-    ) { pad ->
-        val m = Modifier.padding(pad)
-        androidx.compose.foundation.layout.Box(m) {
-            when (Tab.entries[tab]) {
-                Tab.Calendar -> CalendarScreen(vm, days, calendar, medical, conditions, onImport = { importing = true })
-                Tab.Medical -> MedicalScreen(vm, medical, conditions)
-                Tab.Payroll -> PayrollScreen(vm, days, calendar, medical, payslips, conditions, vm::savePayslip)
-                Tab.Conditions -> ConditionsScreen(conditions, vm::saveConditions)
             }
         }
     }

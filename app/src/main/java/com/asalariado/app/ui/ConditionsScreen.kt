@@ -1,5 +1,10 @@
 package com.asalariado.app.ui
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BeachAccess
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Euro
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,16 +50,12 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
     val changed = d != c
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Condiciones anuales", style = MaterialTheme.typography.titleLarge)
-        Text(
-            "Copia los datos de tu contrato y convenio. Con ellos se calcula lo que deberías cobrar cada mes.",
-            style = MaterialTheme.typography.bodySmall,
-        )
+        ScreenHeader("Condiciones", "Tu contrato y convenio: con esto se calcula lo que deberías cobrar")
 
-        SectionCard("Salario") {
+        SectionCard("Salario", icon = Icons.Default.Euro) {
             EscalonPicker(d.escalon) { n ->
                 d = if (n == null) d.copy(escalon = null) else TablaSalarial.BELLOTA_2026.aplicar(d, n)
             }
@@ -113,7 +114,7 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
             )
         }
 
-        SectionCard("Jornada") {
+        SectionCard("Jornada", icon = Icons.Default.Schedule) {
             NumberField("Horas anuales de convenio", d.annualHours, Modifier.fillMaxWidth(), "h") { d = d.copy(annualHours = it) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField("Jornada normal", d.normalDayHours, Modifier.weight(1f), "h") { d = d.copy(normalDayHours = it) }
@@ -144,7 +145,7 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
             }
         }
 
-        SectionCard("Pluses y horas extra") {
+        SectionCard("Pluses y horas extra", icon = Icons.Default.Star) {
             NumberField("Plus nocturnidad por hora (22–6 h)", d.nightBonusPerHour, Modifier.fillMaxWidth(), "€") { d = d.copy(nightBonusPerHour = it) }
             NumberField("Plus festivo por hora", d.holidayBonusPerHour, Modifier.fillMaxWidth(), "€") { d = d.copy(holidayBonusPerHour = it) }
             NumberField("Precio hora en sábado / festivo activable", d.activablePricePerHour, Modifier.fillMaxWidth(), "€") {
@@ -156,7 +157,7 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
             NumberField("Precio hora extra (0 = hora ordinaria)", d.overtimePrice, Modifier.fillMaxWidth(), "€") { d = d.copy(overtimePrice = it) }
         }
 
-        SectionCard("Permisos anuales") {
+        SectionCard("Permisos anuales", icon = Icons.Default.BeachAccess) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField("Vacaciones", d.vacationDays.toDouble(), Modifier.weight(1f), "días") { d = d.copy(vacationDays = it.toInt()) }
                 NumberField("Libre disposición", d.personalDays.toDouble(), Modifier.weight(1f), "días") { d = d.copy(personalDays = it.toInt()) }

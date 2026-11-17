@@ -1,6 +1,18 @@
 package com.asalariado.app.ui
 
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -96,6 +108,7 @@ fun CalendarScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
+        containerColor = Color.Transparent,
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SmallFloatingActionButton(onClick = { rotationOpen = true }) {
@@ -110,35 +123,63 @@ fun CalendarScreen(
         },
     ) { pad ->
         Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { ymText = ym.minusMonths(1).toString() }) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Mes anterior")
-                }
-                Text(
-                    "${monthName(ym.monthValue)} ${ym.year}",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                )
-                IconButton(onClick = { ymText = ym.plusMonths(1).toString() }) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Mes siguiente")
-                }
-            }
-            TextButton(onClick = { ymText = YearMonth.now().toString() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                Text("Ir a hoy")
-            }
-
+            ScreenHeader("Mis turnos", "Toca una semana o un día para cambiarlo")
+            TodayHero(days, calendar, c)
             if (c.rotationAnchor == null) RotationBanner(onPick = { vm.startRotationFrom(LocalDate.now(), it) })
-            MonthGrid(ym, days, calendar, medicalDates, onDay = { editing = it },
-                actions = WeekActions(
-                    startFrom = { d, s -> vm.startRotationFrom(d, s) },
-                    swap = { vm.swapWeek(it) },
-                    set = { d, s -> vm.setWeek(d, s) },
-                ),
-            )
+
+            Card(
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalIconButton(onClick = { ymText = ym.minusMonths(1).toString() }) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Mes anterior")
+                        }
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            AnimatedContent(ym, label = "mes") { m ->
+                                Text("${monthName(m.monthValue)} ${m.year}", style = MaterialTheme.typography.titleLarge)
+                            }
+                            if (ym != YearMonth.now()) TextButton(onClick = { ymText = YearMonth.now().toString() }) { Text("Volver a hoy") }
+                        }
+                        FilledTonalIconButton(onClick = { ymText = ym.plusMonths(1).toString() }) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Mes siguiente")
+                        }
+                    }
+                    // Deslizar a los lados para cambiar de mes.
+                    var drag by remember { mutableFloatStateOf(0f) }
+                    AnimatedContent(
+                        targetState = ym,
+                        transitionSpec = {
+                            val dir = if (targetState > initialState) 1 else -1
+                            (slideInHorizontally { w -> dir * w } + fadeIn()) togetherWith (slideOutHorizontally { w -> -dir * w } + fadeOut())
+                        },
+                        modifier = Modifier.pointerInput(ymText) {
+                            detectHorizontalDragGestures(
+                                onDragEnd = {
+                                    if (drag > 120) ymText = ym.minusMonths(1).toString()
+                                    else if (drag < -120) ymText = ym.plusMonths(1).toString()
+                                    drag = 0f
+                                },
+                                onDragCancel = { drag = 0f },
+                            ) { _, dx -> drag += dx }
+                        },
+                        label = "grid",
+                    ) { shownYm ->
+                        MonthGrid(shownYm, days, calendar, medicalDates, onDay = { editing = it },
+                            actions = WeekActions(
+                                startFrom = { d, s -> vm.startRotationFrom(d, s) },
+                                swap = { vm.swapWeek(it) },
+                                set = { d, s -> vm.setWeek(d, s) },
+                            ),
+                        )
+                    }
+                }
+            }
             Legend(showDayTypes = calendar.isNotEmpty())
             MonthSummaryCard(ym, days, calendar, medical, c)
             Text(
@@ -229,8 +270,8 @@ private fun WeekChip(monday: LocalDate, days: Map<LocalDate, DayEntry>, actions:
     Box {
         val (bg, fg) = if (dominant != null) shiftColors(dominant) else shiftColors(ShiftType.OFF)
         Box(
-            Modifier.width(40.dp).height(52.dp).clip(RoundedCornerShape(8.dp))
-                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline), RoundedCornerShape(8.dp))
+            Modifier.width(40.dp).height(52.dp).clip(RoundedCornerShape(12.dp))
+                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline), RoundedCornerShape(12.dp))
                 .background(bg.copy(alpha = 0.35f))
                 .clickable { menu = true },
             contentAlignment = Alignment.Center,
@@ -285,8 +326,8 @@ private fun DayCell(
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Box(
-        modifier.height(52.dp).alpha(if (inMonth) 1f else 0.4f).clip(RoundedCornerShape(8.dp)).background(bg)
-            .then(if (isToday) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
+        modifier.height(52.dp).alpha(if (inMonth) 1f else 0.35f).clip(RoundedCornerShape(12.dp)).background(bg)
+            .then(if (isToday) Modifier.border(2.5.dp, MaterialTheme.colorScheme.onBackground, RoundedCornerShape(12.dp)) else Modifier)
             .clickable(onClick = onClick)
             .padding(3.dp),
     ) {
@@ -309,6 +350,38 @@ private fun DayCell(
         }
         if (hasMedical) {
             Box(Modifier.align(Alignment.TopEnd).size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error))
+        }
+    }
+}
+
+/** Tarjeta de «hoy»: turno de hoy, de esta semana y de la siguiente. */
+@Composable
+private fun TodayHero(days: Map<LocalDate, DayEntry>, calendar: Map<LocalDate, DayType>, c: Conditions) {
+    val today = LocalDate.now()
+    val entry = days[today]
+    fun weekShift(monday: LocalDate) = (0L..6L).mapNotNull { days[monday.plusDays(it)]?.shift }.filter { it.isWork }
+        .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+    val monday = Rotation.mondayOf(today)
+    val thisWeek = weekShift(monday)
+    val nextWeek = weekShift(monday.plusWeeks(1))
+    val main = entry?.shift
+    val base = main?.let { shiftColors(it).first }?.takeIf { main.isWork } ?: MaterialTheme.colorScheme.primary
+    HeroCard(colors = listOf(lerp(base, Color.Black, 0.15f), MaterialTheme.colorScheme.primary)) {
+        Text(today.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", ES)).replaceFirstChar { it.uppercase() },
+            style = MaterialTheme.typography.labelLarge)
+        val title = when {
+            main == null -> calendar[today]?.label ?: "Sin turno apuntado"
+            main.isWork -> "Turno de ${main.label.lowercase()}"
+            else -> main.label
+        }
+        Text(title, style = MaterialTheme.typography.headlineSmall)
+        entry?.effectiveHours(c)?.let { h ->
+            Text("${h.start.hhmm()} – ${h.end.hhmm()} · ${hours(com.asalariado.core.hoursBetween(h.start, h.end))}",
+                style = MaterialTheme.typography.bodyLarge)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            Pill("Esta semana: ${thisWeek?.label ?: "—"}", Color.White.copy(alpha = 0.22f))
+            Pill("Siguiente: ${nextWeek?.label ?: "—"}", Color.White.copy(alpha = 0.22f))
         }
     }
 }
@@ -371,7 +444,7 @@ private fun MonthSummaryCard(
     c: Conditions,
 ) {
     val s = remember(ym, days, calendar, medical, c) { Payroll.month(ym, days.values, medical, c, null, calendar) }
-    SectionCard("Resumen de ${monthName(ym.monthValue).lowercase()}") {
+    SectionCard("Resumen de ${monthName(ym.monthValue).lowercase()}", icon = Icons.Default.Insights) {
         KeyValue("Días trabajados", "${s.workedDays}")
         KeyValue("Horas trabajadas", hours(s.workedHours))
         if (s.calendarHours > 0) KeyValue("Horas según calendario laboral", hours(s.calendarHours))
