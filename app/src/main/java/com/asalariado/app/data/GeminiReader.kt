@@ -28,32 +28,48 @@ object GeminiReader {
 
     fun readCalendar(context: Context, uri: Uri, key: String, pdfPassword: String?): AnnualCalendar {
         val (mime, bytes) = payload(context, uri, pdfPassword)
-        val body = JSONObject()
-            .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray()
-                .put(JSONObject().put("inline_data", JSONObject().put("mime_type", mime)
-                    .put("data", Base64.encodeToString(bytes, Base64.NO_WRAP))))
-                .put(JSONObject().put("text", AiCalendar.PROMPT)))))
-            .put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("temperature", 0))
-            .toString()
+        fun body(model: String, thinking: Boolean): String {
+            val gen = JSONObject().put("responseMimeType", "application/json").put("temperature", 0)
+            // Que piense poco: contesta antes y para leer colores no hace falta mucho razonamiento.
+            if (thinking) gen.put(
+                "thinkingConfig",
+                if (model.contains("2.5")) JSONObject().put("thinkingBudget", 1024) else JSONObject().put("thinkingLevel", "low"),
+            )
+            return JSONObject()
+                .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray()
+                    .put(JSONObject().put("inline_data", JSONObject().put("mime_type", mime)
+                        .put("data", Base64.encodeToString(bytes, Base64.NO_WRAP))))
+                    .put(JSONObject().put("text", AiCalendar.PROMPT)))))
+                .put("generationConfig", gen)
+                .toString()
+        }
 
         var lastError: AiError? = null
         // Tiempo máximo para toda la lectura, con reintentos y cambios de modelo incluidos.
-        val deadline = System.currentTimeMillis() + 150_000L
+        val deadline = System.currentTimeMillis() + 180_000L
         fun left() = deadline - System.currentTimeMillis()
         val models = (PREFERRED + listOfNotNull(runCatching { newestFlash(key) }.getOrNull()) + FALLBACK).distinct()
         for (model in models) {
+            var thinking = true
             // Si Google está saturado (503/500), se reintenta un par de veces y luego se prueba otro modelo.
-            for (attempt in 0..2) {
-                if (left() < 8_000) throw AiError("Gemini está tardando demasiado; prueba en unos minutos")
-                val (code, text) = http("$BASE/models/$model:generateContent", key, body, left().toInt())
+            var attempt = 0
+            while (attempt < 3) {
+                if (left() < 8_000) throw lastError ?: AiError("Gemini está tardando demasiado; prueba en unos minutos")
+                // Cada intento, como mucho 75 s: si uno se queda colgado, queda tiempo para otro modelo.
+                val (code, text) = http("$BASE/models/$model:generateContent", key, body(model, thinking), minOf(left(), 75_000L).toInt())
                 when {
                     code == 200 -> return parse(text)
+                    code == -2 -> { lastError = AiError("Gemini está tardando demasiado; prueba en unos minutos"); break }
                     code == -1 -> {
                         if (attempt == 2) throw AiError(
                             "sin conexión con Google ($text). Comprueba que tienes internet; si usas un bloqueador " +
                                 "de anuncios, una VPN o «DNS privado», puede estar bloqueando a Gemini",
                         )
                         Thread.sleep(minOf(3_000L, maxOf(0L, left() - 8_000)))
+                    }
+                    code == 400 && thinking && text.contains("thinking", ignoreCase = true) -> {
+                        thinking = false // este modelo no admite ese ajuste: se repite sin él
+                        continue
                     }
                     code == 404 -> { lastError = AiError("modelo $model no disponible"); break }
                     code == 400 && text.contains("API_KEY", ignoreCase = true) ->
@@ -66,6 +82,7 @@ object GeminiReader {
                     }
                     else -> throw AiError("Gemini respondió con error $code: ${googleMessage(text)}")
                 }
+                attempt++
             }
         }
         throw lastError ?: AiError("no hay ningún modelo de Gemini disponible")
@@ -83,7 +100,7 @@ object GeminiReader {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 3000) sample *= 2
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 2000) sample *= 2
         val bmp = context.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
         } ?: throw AiError("no se pudo abrir la imagen")
@@ -95,8 +112,8 @@ object GeminiReader {
     private fun http(url: String, key: String, body: String?, timeoutMs: Int = 20_000): Pair<Int, String> {
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
-            conn.connectTimeout = 20_000
             conn.readTimeout = timeoutMs.coerceIn(5_000, 120_000)
+            conn.connectTimeout = minOf(20_000, timeoutMs.coerceAtLeast(5_000))
             conn.setRequestProperty("x-goog-api-key", key)
             if (body != null) {
                 conn.requestMethod = "POST"
@@ -109,7 +126,7 @@ object GeminiReader {
                 ?.bufferedReader()?.use { it.readText() } ?: ""
             return code to text
         } catch (e: java.net.SocketTimeoutException) {
-            throw AiError("Gemini está tardando demasiado; prueba en unos minutos")
+            return -2 to "timeout"
         } catch (e: java.io.IOException) {
             // Sin conexión (o el nombre de Google no se resuelve): se marca para reintentar.
             return -1 to (e.javaClass.simpleName ?: "IOException")
