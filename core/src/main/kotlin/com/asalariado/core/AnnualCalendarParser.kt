@@ -143,7 +143,8 @@ object AnnualCalendarParser {
         return AnnualCalendar(year, days, best.keys.sorted())
     }
 
-    private fun detectYear(lines: List<TextItem>): Int? =
+    /** Año del calendario: el «20xx» escrito con letra más grande (normalmente el título). */
+    fun detectYear(lines: List<TextItem>): Int? =
         lines.mapNotNull { l -> yearRe.find(l.text)?.let { it.groupValues[1].toInt() to (l.bottom - l.top) } }
             .maxByOrNull { it.second }?.first
 

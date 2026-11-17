@@ -36,6 +36,8 @@ data class ImportState(
     val annualMode: Boolean = true,
     /** Año elegido a mano para el calendario anual (null = el que ponga la imagen). */
     val annualYear: Int? = null,
+    /** El año del calendario anual se ha leído de la propia imagen/PDF. */
+    val yearDetected: Boolean = false,
     val loading: Boolean = false,
     /** Calendario laboral anual detectado por colores (si la captura lo es). */
     val annual: AnnualCalendar? = null,
@@ -72,6 +74,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val import = MutableStateFlow(ImportState())
+
+    /** Mes al que debe saltar el calendario (p. ej. enero del año importado). */
+    val calendarJump = MutableStateFlow<java.time.YearMonth?>(null)
 
     /** Imagen recibida desde "Compartir" de otra app, pendiente de procesar. */
     val sharedImage = MutableStateFlow<Uri?>(null)
@@ -139,6 +144,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val gen = Rotation.generate(from, to, c, annual.days)
             dao.upsertDays(Rotation.merge(existing, gen, overwrite = false).map { it.toEntity() })
         }
+        calendarJump.value = java.time.YearMonth.of(annual.year, annual.months.min())
         clearImport()
     }
 
@@ -202,6 +208,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             import.value = st.copy(
                 loading = false,
                 annual = annual,
+                yearDetected = st.annualYear == null && lastOcr.any { AnnualCalendarParser.detectYear(it.lines) != null },
                 rows = emptyList(),
                 rawText = lastOcr.joinToString("\n\n——\n\n") { it.fullText },
                 error = if (annual == null) {

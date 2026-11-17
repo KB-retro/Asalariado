@@ -152,7 +152,7 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Condit
             }
 
             st.annual?.let { annual ->
-                AnnualPreview(annual, c, Modifier.weight(1f)) { useHours, fill ->
+                AnnualPreview(annual, st.yearDetected, c, Modifier.weight(1f)) { useHours, fill ->
                     vm.commitAnnual(useHours, fill); onClose()
                 }
             }
@@ -278,6 +278,7 @@ fun MonthSelector(year: Int, month: Int, onChange: (Int, Int) -> Unit) {
 @Composable
 private fun AnnualPreview(
     annual: AnnualCalendar,
+    yearDetected: Boolean,
     c: Conditions,
     modifier: Modifier,
     onSave: (useHours: Boolean, fillShifts: Boolean) -> Unit,
@@ -292,6 +293,12 @@ private fun AnnualPreview(
                 "Calendario laboral ${annual.year} · ${annual.months.size} meses detectados",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                if (yearDetected) "Año ${annual.year} leído del propio calendario: se guardará en ${annual.year}."
+                else "No pone el año: se guardará en ${annual.year}. Cámbialo arriba si no es ese.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (yearDetected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
             )
             Text("Comprueba que los colores coinciden con tu calendario; luego podrás cambiar cualquier día tocándolo.",
                 style = MaterialTheme.typography.bodySmall)

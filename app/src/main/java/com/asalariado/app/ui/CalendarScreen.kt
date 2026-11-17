@@ -43,6 +43,8 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +82,10 @@ fun CalendarScreen(
 ) {
     var ymText by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     val ym = YearMonth.parse(ymText)
+    val jump by vm.calendarJump.collectAsState()
+    LaunchedEffect(jump) {
+        jump?.let { ymText = it.toString(); vm.calendarJump.value = null }
+    }
     var editing by remember { mutableStateOf<LocalDate?>(null) }
     var rotationOpen by remember { mutableStateOf(false) }
     val medicalDates = remember(medical) { medical.map { it.date }.toSet() }
