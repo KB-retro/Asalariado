@@ -47,7 +47,6 @@ import com.asalariado.app.ImportedPayslip
 import androidx.compose.foundation.lazy.itemsIndexed
 import com.asalariado.core.Conditions
 import com.asalariado.app.data.Report
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.rememberCoroutineScope
