@@ -263,7 +263,7 @@ private fun MonthRow(m: MonthSummary, onExtraClick: () -> Unit, onClick: () -> U
                 if (m.nightShiftPlus > 0) KeyValue("  ${m.nightShifts} turnos de noche", money(m.nightShiftPlus))
                 if (m.bonusDiscount > 0) KeyValue("  sin prima ${hours(m.unpaidBonusHours)} (médico / libre disp.)", "−" + money(m.bonusDiscount))
                 if (m.assemblyDiscount > 0) KeyValue("  asamblea ${hours(m.assemblyHours)} (sin prima)", "−" + money(m.assemblyDiscount))
-                if (m.strikeDeduction > 0) KeyValue("  huelga / paros ${hours(m.strikeHours)}", "−" + money(m.strikeDeduction))
+                if (m.strikeDeduction > 0) KeyValue("  sin cobrar ${hours(m.strikeHours)} (huelga, paros, médico sin justificante)", "−" + money(m.strikeDeduction))
                 if (m.parentalDeduction > 0) KeyValue("  permiso nacimiento ${m.parentalDays} días", "−" + money(m.parentalDeduction))
                 if (m.nightPlus > 0) KeyValue("  plus nocturnidad", money(m.nightPlus))
                 if (m.holidayPlus > 0) KeyValue("  plus festivos", money(m.holidayPlus))

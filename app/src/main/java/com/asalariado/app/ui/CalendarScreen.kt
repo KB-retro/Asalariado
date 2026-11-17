@@ -459,7 +459,7 @@ private fun MonthSummaryCard(
         KeyValue("Horas trabajadas", hours(s.workedHours))
         if (s.calendarHours > 0) KeyValue("Horas según calendario laboral", hours(s.calendarHours))
         if (s.activableDays > 0) KeyValue("Activables trabajados", "${s.activableDays} (${hours(s.activableHours)})")
-        if (s.strikeHours > 0) KeyValue("Huelga / paros (sin cobrar)", hours(s.strikeHours))
+        if (s.strikeHours > 0) KeyValue("Sin cobrar (huelga, paros, médico sin justif.)", hours(s.strikeHours))
         if (s.assemblyHours > 0) KeyValue("Asambleas (sin prima)", hours(s.assemblyHours))
         if (s.overtimeHours > 0) KeyValue("Horas extra / compensadas", "${hours(s.overtimeHours)} · ${money(s.overtimePay)}")
         if (s.parentalDays > 0) KeyValue("Permiso por nacimiento", "${s.parentalDays} días")

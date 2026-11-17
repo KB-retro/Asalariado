@@ -134,10 +134,10 @@ object Payroll {
         val med = medical.filter { YearMonth.from(it.date) == ym && it.justified }
         val work = inMonth.filter { it.shift.isWork }
 
-        // Las horas de paro no cuentan como trabajadas.
+        // Las horas de paro no cuentan como trabajadas. Las horas extra van aparte (ya se pagan como
+        // extra), así que no cuentan para la jornada anual ni para el «exceso de jornada».
         val workedHours = work.sumOf { it.workedHours(c) } -
-            stoppages.filter { YearMonth.from(it.date) == ym && it.kind == StoppageKind.STRIKE }.sumOf { it.hours } +
-            stoppages.filter { YearMonth.from(it.date) == ym && it.kind == StoppageKind.OVERTIME }.sumOf { it.hours }
+            stoppages.filter { YearMonth.from(it.date) == ym && it.kind == StoppageKind.STRIKE }.sumOf { it.hours }
         val nightHours = work.sumOf { it.nightHours(c) }
         val holidayHours = work.filter { it.holidayWorked }.sumOf { it.workedHours(c) }
         val medicalHours = med.sumOf { it.hours }
@@ -165,7 +165,10 @@ object Payroll {
         }
 
         // La prima no se cobra en las horas de médico (cualquier tipo) ni en los días de libre disposición.
-        val allMedicalHours = medical.filter { YearMonth.from(it.date) == dm }.sumOf { it.hours }
+        // Sin justificante no se cobra nada de esas horas (salario + prima).
+        val dmMedical = medical.filter { YearMonth.from(it.date) == dm }
+        val allMedicalHours = dmMedical.filter { it.justified }.sumOf { it.hours }
+        val unjustifiedHours = dmMedical.filter { !it.justified }.sumOf { it.hours }
         val personalDays = inMonth.count { it.shift == ShiftType.PERSONAL }
         val personalDaysDiscounted = days.count { YearMonth.from(it.date) == dm && it.shift == ShiftType.PERSONAL }
         val unpaidBonusHours = allMedicalHours + personalDaysDiscounted * c.normalDayHours
@@ -177,7 +180,7 @@ object Payroll {
         val strikeDayList = days.filter { YearMonth.from(it.date) == dm && it.shift == ShiftType.STRIKE }
         val strikeDayHours = strikeDayList.sumOf { d -> calendar[d.date]?.let { plannedHours(it, c) }?.takeIf { it > 0 } ?: c.normalDayHours }
         val strikeHours = stops.filter { it.kind == StoppageKind.STRIKE }.sumOf { it.hours }
-        val strikeDeduction = (strikeDayHours + strikeHours) * (c.effectiveSalaryPerHour + c.bonusPerHour)
+        val strikeDeduction = (strikeDayHours + strikeHours + unjustifiedHours) * (c.effectiveSalaryPerHour + c.bonusPerHour)
         val assemblyHours = stops.filter { it.kind == StoppageKind.ASSEMBLY }.sumOf { it.hours }
         val assemblyDiscount = assemblyHours * c.bonusPerHour
 
@@ -232,7 +235,7 @@ object Payroll {
             unpaidBonusHours = unpaidBonusHours,
             bonusDiscount = bonusDiscount,
             strikeDays = strikeDayList.size,
-            strikeHours = strikeDayHours + strikeHours,
+            strikeHours = strikeDayHours + strikeHours + unjustifiedHours,
             strikeDeduction = strikeDeduction,
             assemblyHours = assemblyHours,
             assemblyDiscount = assemblyDiscount,

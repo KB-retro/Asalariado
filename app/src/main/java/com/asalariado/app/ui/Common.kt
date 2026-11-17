@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.asalariado.core.DayType
+import com.asalariado.core.TextInput
 import com.asalariado.core.ShiftType
 import java.text.NumberFormat
 import java.time.Instant
@@ -73,15 +75,9 @@ val shortFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", ES)
 fun monthName(m: Int): String = java.time.Month.of(m).getDisplayName(TextStyle.FULL_STANDALONE, ES).replaceFirstChar { it.uppercase() }
 fun LocalTime.hhmm(): String = String.format(Locale.US, "%02d:%02d", hour, minute)
 
-fun parseTime(s: String): LocalTime? {
-    val t = s.trim().replace('.', ':').replace('h', ':')
-    val m = Regex("""^(\d{1,2})(?::(\d{1,2}))?:?$""").find(t) ?: return null
-    val h = m.groupValues[1].toInt()
-    val mi = m.groupValues[2].toIntOrNull() ?: 0
-    return if (h in 0..24 && mi in 0..59) LocalTime.of(h % 24, mi) else null
-}
+fun parseTime(s: String): LocalTime? = TextInput.parseTime(s)
 
-fun parseNum(s: String): Double? = s.trim().replace(',', '.').toDoubleOrNull()
+fun parseNum(s: String): Double? = TextInput.parseNum(s)
 
 /** Colores por turno (fondo, texto). */
 @Composable
@@ -229,7 +225,9 @@ fun KeyValue(label: String, value: String, valueColor: Color = Color.Unspecified
 /** Campo numérico que mantiene el texto escrito y avisa del valor al cambiar. */
 @Composable
 fun NumberField(label: String, value: Double, modifier: Modifier = Modifier, suffix: String = "", onChange: (Double) -> Unit) {
-    var text by remember(value) { mutableStateOf(num(value)) }
+    // El texto escrito se respeta mientras se teclea; sólo se reescribe si el valor cambia desde fuera.
+    var text by remember { mutableStateOf(num(value)) }
+    LaunchedEffect(value) { if (parseNum(text) != value) text = num(value) }
     OutlinedTextField(
         value = text,
         onValueChange = { t -> text = t; parseNum(t)?.let(onChange) },
@@ -244,7 +242,8 @@ fun NumberField(label: String, value: Double, modifier: Modifier = Modifier, suf
 
 @Composable
 fun TimeField(label: String, value: LocalTime?, modifier: Modifier = Modifier, onChange: (LocalTime?) -> Unit) {
-    var text by remember(value) { mutableStateOf(value?.hhmm() ?: "") }
+    var text by remember { mutableStateOf(value?.hhmm() ?: "") }
+    LaunchedEffect(value) { if (parseTime(text) != value) text = value?.hhmm() ?: "" }
     OutlinedTextField(
         value = text,
         onValueChange = { t -> text = t; if (t.isBlank()) onChange(null) else parseTime(t)?.let(onChange) },

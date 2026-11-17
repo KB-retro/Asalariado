@@ -29,6 +29,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +53,16 @@ import java.time.DayOfWeek
 fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
     var d by remember(c) { mutableStateOf(c) }
     val changed = d != c
+    // Se guarda solo: poco después de cada cambio y, si quedaba algo, al salir de la pantalla.
+    LaunchedEffect(d) {
+        if (d != c) {
+            delay(700)
+            onSave(d)
+        }
+    }
+    val latest by rememberUpdatedState(d)
+    val saved by rememberUpdatedState(c)
+    DisposableEffect(Unit) { onDispose { if (latest != saved) onSave(latest) } }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp),
@@ -227,9 +241,12 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
             NumberField("Médico general / acompañante al año", d.medicalHoursPerYear, Modifier.fillMaxWidth(), "h") { d = d.copy(medicalHoursPerYear = it) }
         }
 
-        Button(onClick = { onSave(d) }, enabled = changed, modifier = Modifier.fillMaxWidth()) {
-            Text(if (changed) "Guardar condiciones" else "Guardado")
-        }
+        Text(
+            if (changed) "Guardando…" else "Los cambios se guardan solos.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(24.dp))
     }
 }

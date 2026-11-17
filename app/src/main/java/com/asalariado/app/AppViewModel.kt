@@ -229,7 +229,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val c = conditions.value.copy(rotation = rotated, rotationAnchor = monday)
         store.save(c)
         val cal = calendar.value
-        val to = maxOf(LocalDate.of(monday.year, 12, 31), cal.keys.maxOrNull() ?: monday)
+        // Hasta fin de año, y al menos un año por delante (si se marca en diciembre sigue en enero).
+        val to = maxOf(LocalDate.of(monday.year, 12, 31), monday.plusYears(1), cal.keys.maxOrNull() ?: monday)
         val existing = dao.daysBetween(monday.toEpochDay(), to.toEpochDay()).map { it.toModel() }.associateBy { it.date }
         val generated = Rotation.generate(monday, to, c, cal)
         val weekEnd = monday.plusDays(6)
@@ -274,6 +275,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun savePayslipPassword(p: String?) {
         secure.payslipPassword = p
         payslipPassword.value = p
+    }
+
+    /** ¿Es un PDF de nómina? (lo tiene que abrir la contraseña guardada o no tener). */
+    suspend fun isPayslipPdf(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        if (!PdfText.isPdf(app, uri)) return@withContext false
+        runCatching {
+            val text = PdfText.read(app, uri, payslipPassword.value).pages.flatten().joinToString(" ") { it.text }.uppercase()
+            "DEVENGOS" in text || "LÍQUIDO" in text || "LIQUIDO" in text || "NÓMINA" in text
+        }.getOrElse { it is PdfText.WrongPassword } // un PDF con contraseña que no abre: casi seguro una nómina
     }
 
     /** Lee una o varias nóminas (PDF, con o sin contraseña, o capturas). */
@@ -349,7 +360,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (updateConditions && latest != null) {
             val p = latest
             var c = conditions.value
-            p.escalon?.let { e -> if (TablaSalarial.BELLOTA_2026.escalon(e) != null) c = TablaSalarial.BELLOTA_2026.aplicar(c, e) }
+            // Sólo se aplica la tabla si cambia el escalón, para no pisar lo que hayas ajustado a mano.
+            p.escalon?.let { e ->
+                if (e != c.escalon && TablaSalarial.BELLOTA_2026.escalon(e) != null) c = TablaSalarial.BELLOTA_2026.aplicar(c, e)
+            }
             c = c.copy(
                 baseMonthly = p.jornal ?: c.baseMonthly,
                 bonusMonthly = p.prima ?: c.bonusMonthly,
@@ -414,7 +428,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         import.value = import.value.copy(loading = true, error = null, annual = null, rows = emptyList(), rawText = "")
         try {
             lastOcr = uris.flatMap { Ocr.recognize(getApplication(), it, payslipPassword.value) }
-            reparse(detect = true)
+            withContext(Dispatchers.Default) { reparseNow(detect = true) }
         } catch (e: Exception) {
             import.value = import.value.copy(loading = false, error = "No se pudo leer el archivo: ${e.message}")
         }
@@ -437,6 +451,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun reparse(detect: Boolean) {
+        // Leer colores y cuadrículas cuesta un poco: se hace fuera del hilo de la pantalla.
+        viewModelScope.launch(Dispatchers.Default) { reparseNow(detect) }
+    }
+
+    private fun reparseNow(detect: Boolean) {
         val st = import.value
         val c = conditions.value
         var year = st.year

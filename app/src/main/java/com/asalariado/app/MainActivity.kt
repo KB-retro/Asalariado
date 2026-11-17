@@ -116,10 +116,16 @@ private fun App(vm: AppViewModel) {
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(shared) {
-        shared?.let {
-            importUri = it.toString()
-            importing = true
+        shared?.let { uri ->
             vm.sharedImage.value = null
+            // Una nómina compartida va a Nómina; un calendario o cuadrante, a Importar.
+            if (vm.isPayslipPdf(uri)) {
+                tab = Tab.Payroll.ordinal
+                vm.readPayslips(listOf(uri))
+            } else {
+                importUri = uri.toString()
+                importing = true
+            }
         }
     }
     LaunchedEffect(message) {

@@ -178,6 +178,11 @@ private fun MedicalDialog(m: MedicalVisit, onDismiss: () -> Unit, onSave: (Medic
                     TimeField("Desde", start, Modifier.weight(1f)) { start = it }
                     TimeField("Hasta", end, Modifier.weight(1f)) { end = it }
                 }
+                if (start != null && end != null && end!! <= start!!) Text(
+                    "La hora de salida tiene que ser posterior a la de entrada.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 OutlinedTextField(reason, { reason = it }, label = { Text("Motivo (opcional)") }, modifier = Modifier.fillMaxWidth())
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(justified, { justified = it })
@@ -187,7 +192,7 @@ private fun MedicalDialog(m: MedicalVisit, onDismiss: () -> Unit, onSave: (Medic
         },
         confirmButton = {
             TextButton(
-                enabled = start != null && end != null,
+                enabled = start != null && end != null && end!! > start!!,
                 onClick = { onSave(m.copy(date = date, start = start!!, end = end!!, reason = reason, justified = justified, kind = kind)) },
             ) { Text("Guardar") }
         },

@@ -154,6 +154,20 @@ class PayrollTest {
     }
 
     @Test
+    fun unjustifiedMedicalAndOvertimeNotInAnnual() {
+        val cc = TablaSalarial.BELLOTA_2026.aplicar(Conditions(), 10)
+        val med = listOf(MedicalVisit(date = LocalDate.of(2026, 9, 10), start = LocalTime.of(8, 0), end = LocalTime.of(10, 0), justified = false))
+        val m = Payroll.month(YearMonth.of(2026, 9), emptyList(), med, cc, null)
+        assertEquals(0.0, m.bonusDiscount, 0.001)
+        assertEquals(2 * (13.8411 + 5.0621), m.strikeDeduction, 0.001)
+        val days = listOf(DayEntry(LocalDate.of(2026, 9, 7), ShiftType.MORNING))
+        val stops = listOf(Stoppage(LocalDate.of(2026, 9, 7), StoppageKind.OVERTIME, 3.0))
+        val m2 = Payroll.month(YearMonth.of(2026, 9), days, emptyList(), cc, null, stoppages = stops)
+        assertEquals(8.0, m2.workedHours, 0.001)
+        assertEquals(3.0, m2.overtimeHours, 0.001)
+    }
+
+    @Test
     fun discountsNextMonth() {
         val cc = TablaSalarial.BELLOTA_2026.aplicar(Conditions(), 10).copy(discountsNextMonth = true)
         val med = listOf(MedicalVisit(date = LocalDate.of(2026, 9, 10), start = LocalTime.of(8, 0), end = LocalTime.of(9, 0)))
