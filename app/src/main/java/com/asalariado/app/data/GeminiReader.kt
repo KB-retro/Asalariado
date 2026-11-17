@@ -20,6 +20,9 @@ import java.net.URL
 object GeminiReader {
     class AiError(msg: String) : Exception(msg)
 
+    /** Modelo con el que se leyó la última vez (para enseñarlo). */
+    @Volatile var lastModel: String? = null
+
     private const val BASE = "https://generativelanguage.googleapis.com/v1beta"
     /** Se prueban en orden; si Google los retira, se busca el «flash» más nuevo disponible. */
     private val PREFERRED = listOf("gemini-flash-latest", "gemini-2.5-flash")
@@ -48,7 +51,10 @@ object GeminiReader {
         // Tiempo máximo para toda la lectura, con reintentos y cambios de modelo incluidos.
         val deadline = System.currentTimeMillis() + 180_000L
         fun left() = deadline - System.currentTimeMillis()
-        val models = (PREFERRED + listOfNotNull(runCatching { newestFlash(key) }.getOrNull()) + FALLBACK).distinct()
+        // Primero el modelo que funcionó la última vez; luego los habituales.
+        val prefs = context.getSharedPreferences("ia", Context.MODE_PRIVATE)
+        val good = prefs.getString("modelo_ok", null)
+        val models = (listOfNotNull(good) + PREFERRED + listOfNotNull(runCatching { newestFlash(key) }.getOrNull()) + FALLBACK).distinct()
         for (model in models) {
             var thinking = true
             // Si Google está saturado (503/500), se reintenta un par de veces y luego se prueba otro modelo.
@@ -58,7 +64,12 @@ object GeminiReader {
                 // Cada intento, como mucho 75 s: si uno se queda colgado, queda tiempo para otro modelo.
                 val (code, text) = http("$BASE/models/$model:generateContent", key, body(model, thinking), minOf(left(), 75_000L).toInt())
                 when {
-                    code == 200 -> return parse(text)
+                    code == 200 -> {
+                        val cal = parse(text)
+                        prefs.edit().putString("modelo_ok", model).apply()
+                        lastModel = model
+                        return cal
+                    }
                     code == -2 -> { lastError = AiError("Gemini está tardando demasiado; prueba en unos minutos"); break }
                     code == -1 -> {
                         if (attempt == 2) throw AiError(

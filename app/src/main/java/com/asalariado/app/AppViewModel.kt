@@ -510,7 +510,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             aiFailure = null
             import.value = import.value.copy(
                 loading = false, loadingText = null, annual = cal, error = null, aiUsed = true, yearDetected = import.value.annualYear == null,
-                rawText = "Leído con IA (Gemini): ${months.size} meses del año ${cal.year}.",
+                rawText = "Leído con IA (${GeminiReader.lastModel ?: "Gemini"}): ${months.size} meses del año ${cal.year}.",
                 aiNote = if (months.size < 12) "La IA sólo ha encontrado ${months.size} meses: revisa el calendario." else null,
             )
             true
