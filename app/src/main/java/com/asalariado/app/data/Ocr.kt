@@ -127,25 +127,68 @@ object Ocr {
         throw ModelNotReady()
     }
 
+    private suspend fun process(recognizer: TextRecognizer, bmp: Bitmap) = suspendCancellableCoroutine { cont ->
+        recognizer.process(InputImage.fromBitmap(bmp, 0))
+            .addOnSuccessListener { cont.resume(it) }
+            .addOnFailureListener { cont.resumeWithException(it) }
+    }
+
+    /** Líneas y palabras de un resultado, llevadas a coordenadas de la imagen entera. */
+    private fun collect(
+        text: com.google.mlkit.vision.text.Text, dx: Int, dy: Int, scale: Float,
+        lines: MutableList<TextItem>, words: MutableList<TextItem>,
+    ) {
+        fun map(t: String, b: android.graphics.Rect) = TextItem(
+            t, dx + (b.left / scale).toInt(), dy + (b.top / scale).toInt(),
+            dx + (b.right / scale).toInt(), dy + (b.bottom / scale).toInt(),
+        )
+        for (block in text.textBlocks) for (line in block.lines) {
+            line.boundingBox?.let { lines += map(line.text, it) }
+            for (el in line.elements) el.boundingBox?.let { words += map(el.text, it) }
+        }
+    }
+
     suspend fun recognizeBitmap(context: Context, bitmap: Bitmap): Result {
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         try {
             ensureModel(context, recognizer)
-            val text = suspendCancellableCoroutine { cont ->
-                recognizer.process(InputImage.fromBitmap(bitmap, 0))
-                    .addOnSuccessListener { cont.resume(it) }
-                    .addOnFailureListener { cont.resumeWithException(it) }
-            }
+            val full = process(recognizer, bitmap)
             val lines = ArrayList<TextItem>()
             val words = ArrayList<TextItem>()
-            for (block in text.textBlocks) for (line in block.lines) {
-                line.boundingBox?.let { b -> lines += TextItem(line.text, b.left, b.top, b.right, b.bottom) }
-                for (el in line.elements) {
-                    el.boundingBox?.let { b -> words += TextItem(el.text, b.left, b.top, b.right, b.bottom) }
+            collect(full, 0, 0, 1f, lines, words)
+
+            // Los números pequeños (p. ej. los días de un calendario en una captura del móvil) se
+            // le escapan al lector en la imagen entera: se vuelve a leer por trozos ampliados.
+            val w = bitmap.width
+            val h = bitmap.height
+            val tile = (minOf(w, h) / 2).coerceAtLeast(300)
+            val cols = (w + tile - 1) / tile
+            val rows = (h + tile - 1) / tile
+            val tw = w / cols
+            val th = h / rows
+            val pad = (tile * 0.12f).toInt()
+            val tLines = ArrayList<TextItem>()
+            val tWords = ArrayList<TextItem>()
+            if (cols * rows in 2..24) for (r in 0 until rows) for (c in 0 until cols) {
+                val x0 = (c * tw - pad).coerceAtLeast(0)
+                val y0 = (r * th - pad).coerceAtLeast(0)
+                val x1 = ((c + 1) * tw + pad).coerceAtMost(w)
+                val y1 = ((r + 1) * th + pad).coerceAtMost(h)
+                val scale = (1600f / (x1 - x0)).coerceIn(1f, 3f)
+                val piece = withContext(Dispatchers.Default) {
+                    val m = Matrix().apply { setScale(scale, scale) }
+                    Bitmap.createBitmap(bitmap, x0, y0, x1 - x0, y1 - y0, m, true)
+                }
+                try {
+                    collect(process(recognizer, piece), x0, y0, scale, tLines, tWords)
+                } finally {
+                    if (piece !== bitmap) piece.recycle()
                 }
             }
+            val allLines = com.asalariado.core.TextMerge.merge(lines, tLines)
+            val allWords = com.asalariado.core.TextMerge.merge(words, tWords)
             val pixels = withContext(Dispatchers.Default) { BitmapPixels(bitmap) }
-            return Result(lines, words, text.text, pixels)
+            return Result(allLines, allWords, allLines.joinToString("\n") { it.text }, pixels)
         } finally {
             recognizer.close()
         }

@@ -37,7 +37,7 @@ object AnnualCalendarParser {
         "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
     )
     private val numberRe = Regex("""^\d{1,2}$""")
-    private val yearRe = Regex("""\b(20\d{2})\b""")
+    private val yearRe = Regex("""(?<!\d)(20[2-9]\d)(?!\d)""")
 
     private data class Header(val month: Int, val item: TextItem) {
         val cx get() = (item.left + item.right) / 2.0
