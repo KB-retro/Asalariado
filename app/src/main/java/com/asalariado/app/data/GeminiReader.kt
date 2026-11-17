@@ -23,6 +23,8 @@ object GeminiReader {
     private const val BASE = "https://generativelanguage.googleapis.com/v1beta"
     /** Se prueban en orden; si Google los retira, se busca el «flash» más nuevo disponible. */
     private val PREFERRED = listOf("gemini-flash-latest", "gemini-2.5-flash")
+    /** Modelos más ligeros, por si los anteriores están saturados. */
+    private val FALLBACK = listOf("gemini-flash-lite-latest", "gemini-2.5-flash-lite")
 
     fun readCalendar(context: Context, uri: Uri, key: String, pdfPassword: String?): AnnualCalendar {
         val (mime, bytes) = payload(context, uri, pdfPassword)
@@ -35,21 +37,31 @@ object GeminiReader {
             .toString()
 
         var lastError: AiError? = null
-        val models = PREFERRED + listOfNotNull(runCatching { newestFlash(key) }.getOrNull())
-        for (model in models.distinct()) {
-            val (code, text) = http("$BASE/models/$model:generateContent", key, body)
-            when {
-                code == 200 -> return parse(text)
-                code == 404 -> { lastError = AiError("modelo $model no disponible"); continue }
-                code == 400 && text.contains("API_KEY", ignoreCase = true) ->
-                    throw AiError("la clave de Gemini no es válida (revísala en Ajustes)")
-                code == 403 -> throw AiError("la clave de Gemini no tiene permiso (revísala en Ajustes)")
-                code == 429 -> throw AiError("se ha superado el límite gratuito de Gemini; prueba más tarde")
-                else -> throw AiError("Gemini respondió con error $code")
+        val models = (PREFERRED + listOfNotNull(runCatching { newestFlash(key) }.getOrNull()) + FALLBACK).distinct()
+        for (model in models) {
+            // Si Google está saturado (503/500), se reintenta un par de veces y luego se prueba otro modelo.
+            for (attempt in 0..2) {
+                val (code, text) = http("$BASE/models/$model:generateContent", key, body)
+                when {
+                    code == 200 -> return parse(text)
+                    code == 404 -> { lastError = AiError("modelo $model no disponible"); break }
+                    code == 400 && text.contains("API_KEY", ignoreCase = true) ->
+                        throw AiError("la clave de Gemini no es válida (revísala en Ajustes)")
+                    code == 403 -> throw AiError("la clave de Gemini no tiene permiso (revísala en Ajustes)")
+                    code == 429 -> { lastError = AiError("se ha superado el límite gratuito de Gemini; prueba más tarde"); break }
+                    code >= 500 -> {
+                        lastError = AiError("los servidores de Gemini están saturados ahora mismo; prueba en unos minutos")
+                        if (attempt < 2) Thread.sleep(if (attempt == 0) 2_000L else 6_000L)
+                    }
+                    else -> throw AiError("Gemini respondió con error $code: ${googleMessage(text)}")
+                }
             }
         }
         throw lastError ?: AiError("no hay ningún modelo de Gemini disponible")
     }
+
+    private fun googleMessage(text: String): String =
+        runCatching { JSONObject(text).getJSONObject("error").getString("message") }.getOrDefault("").take(160)
 
     /** El PDF tal cual (sin contraseña) o la imagen reducida a JPEG. */
     private fun payload(context: Context, uri: Uri, pdfPassword: String?): Pair<String, ByteArray> {
