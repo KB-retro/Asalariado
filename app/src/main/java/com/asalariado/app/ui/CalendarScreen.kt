@@ -115,24 +115,16 @@ fun CalendarScreen(
         contentWindowInsets = WindowInsets(0),
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
-        floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SmallFloatingActionButton(onClick = { rotationOpen = true }) {
-                    Icon(Icons.Default.Autorenew, contentDescription = "Rotación de turnos")
-                }
-                ExtendedFloatingActionButton(
-                    onClick = onImport,
-                    icon = { Icon(Icons.Default.AddPhotoAlternate, null) },
-                    text = { Text("Importar") },
-                )
-            }
-        },
     ) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            ScreenHeader("Mis turnos", "Toca una semana o un día para cambiarlo")
+            ScreenHeader("Mis turnos", "Toca una semana o un día para cambiarlo") {
+                // Acciones en la cabecera para que no tapen el calendario.
+                IconButton(onClick = { rotationOpen = true }) { Icon(Icons.Default.Autorenew, contentDescription = "Rotación de turnos") }
+                FilledTonalIconButton(onClick = onImport) { Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Importar") }
+            }
             TodayHero(days, calendar, c)
             if (c.rotationAnchor == null) RotationBanner(onPick = { vm.startRotationFrom(LocalDate.now(), it) })
 
@@ -199,7 +191,7 @@ fun CalendarScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(120.dp))
+            Spacer(Modifier.height(24.dp))
         }
     }
 

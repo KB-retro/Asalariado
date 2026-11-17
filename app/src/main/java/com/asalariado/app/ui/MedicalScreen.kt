@@ -90,10 +90,11 @@ fun MedicalScreen(vm: AppViewModel, medical: List<MedicalVisit>, c: Conditions) 
                             )
                             Text(hours(used), style = MaterialTheme.typography.titleMedium)
                         }
-                        Column(Modifier.padding(start = 18.dp)) {
-                            Text("Bolsa de médico general / acompañante", style = MaterialTheme.typography.labelLarge)
-                            Text("Te quedan ${hours((allowed - used).coerceAtLeast(0.0))}", style = MaterialTheme.typography.headlineSmall)
-                            Text("de ${hours(allowed)} · especialista: ${hours(specialist)}", style = MaterialTheme.typography.bodyMedium)
+                        Column(Modifier.padding(start = 18.dp).weight(1f)) {
+                            Text("Médico general / acompañante", style = MaterialTheme.typography.labelLarge)
+                            Text("Quedan ${hours((allowed - used).coerceAtLeast(0.0))}", style = MaterialTheme.typography.titleLarge, softWrap = false)
+                            Text("de ${hours(allowed)}", style = MaterialTheme.typography.bodyMedium)
+                            Text("Especialista: ${hours(specialist)}", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }

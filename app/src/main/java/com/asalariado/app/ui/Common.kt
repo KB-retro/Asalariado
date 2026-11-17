@@ -65,7 +65,8 @@ val ES: Locale = Locale.forLanguageTag("es-ES")
 private val euro = NumberFormat.getCurrencyInstance(ES)
 fun money(v: Double?): String = v?.let { euro.format(it) } ?: "—"
 fun hours(v: Double): String = if (v % 1.0 == 0.0) "${v.toInt()} h" else String.format(ES, "%.1f h", v)
-fun num(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toString() else String.format(Locale.US, "%.2f", v)
+fun num(v: Double): String =
+    if (v % 1.0 == 0.0) v.toInt().toString() else String.format(Locale.US, "%.4f", v).trimEnd('0').trimEnd('.').replace('.', ',')
 
 val dayFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM yyyy", ES)
 val shortFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", ES)
@@ -191,8 +192,8 @@ fun HeroCard(
     val cs = MaterialTheme.colorScheme
     val dark = cs.background.luminance() < 0.5f
     val bg = colors ?: if (dark) listOf(cs.primaryContainer, cs.tertiaryContainer) else listOf(cs.primary, cs.tertiary)
-    val avg = lerp(bg.first(), bg.last(), 0.5f)
-    val fg = if (colors == null && dark) cs.onPrimaryContainer else readableOn(avg)
+    // El texto va sobre todo encima del primer color del degradado.
+    val fg = if (colors == null && dark) cs.onPrimaryContainer else readableOn(bg.first())
     Box(
         modifier.fillMaxWidth().styleShadow(ui.hero, ui).clip(ui.hero)
             .background(Brush.linearGradient(bg))
@@ -218,9 +219,10 @@ fun Pill(text: String, color: Color, onColor: Color? = null) {
 
 @Composable
 fun KeyValue(label: String, value: String, valueColor: Color = Color.Unspecified) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = valueColor)
+    // La etiqueta se reparte el espacio y el valor nunca se parte en varias líneas.
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = valueColor, softWrap = false)
     }
 }
 

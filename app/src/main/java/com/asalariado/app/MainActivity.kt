@@ -90,10 +90,10 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Tab(val label: String, val icon: ImageVector) {
-    Calendar("Calendario", Icons.Default.CalendarMonth),
+    Calendar("Turnos", Icons.Default.CalendarMonth),
     Medical("Médico", Icons.Default.LocalHospital),
     Payroll("Nómina", Icons.Default.Euro),
-    Conditions("Condiciones", Icons.Default.Tune),
+    Conditions("Contrato", Icons.Default.Tune),
     Settings("Ajustes", Icons.Default.Settings),
 }
 

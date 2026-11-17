@@ -98,7 +98,7 @@ fun SettingsScreen(vm: AppViewModel, prefs: UiPrefs) {
         }
 
         SectionCard("Modo", icon = Icons.Default.DarkMode) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThemeMode.entries.forEach { m ->
                     FilterChip(selected = prefs.mode == m, onClick = { vm.saveUi(prefs.copy(mode = m)) }, label = { Text(m.label) })
                 }

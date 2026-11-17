@@ -73,7 +73,7 @@ class ScreenshotTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             // Primera captura nada más abrir (sirve también para ver qué hay si algo falla).
             save("inicio")
-            val tabs = listOf("Calendario", "Médico", "Nómina", "Condiciones", "Ajustes")
+            val tabs = listOf("Turnos", "Médico", "Nómina", "Contrato", "Ajustes")
             for (t in tabs) {
                 val byDesc = compose.onAllNodes(hasContentDescription(t), useUnmergedTree = true)
                 val target = if (byDesc.fetchSemanticsNodes().isNotEmpty()) byDesc.onFirst()
