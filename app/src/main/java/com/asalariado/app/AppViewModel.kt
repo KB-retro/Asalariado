@@ -198,7 +198,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         var annualYear: Int? = null
         val annualMonths = sortedSetOf<Int>()
         for (r in lastOcr) {
-            val a = AnnualCalendarParser.parse(r.words, r.pixels, st.annualYear ?: year, st.annualYear) ?: continue
+            val a = AnnualCalendarParser.parse(r.lines, r.pixels, st.annualYear ?: year, st.annualYear, r.words) ?: continue
             if (a.months.size >= (if (st.annualMode) 1 else 2)) {
                 annualDays.putAll(a.days); annualYear = a.year; annualMonths.addAll(a.months)
             }

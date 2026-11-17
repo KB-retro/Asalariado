@@ -1,6 +1,7 @@
 package com.asalariado.core
 
 import java.io.File
+import java.time.LocalDate
 import java.time.YearMonth
 import javax.imageio.ImageIO
 import kotlin.test.Test
@@ -44,6 +45,58 @@ class AnnualCalendarTest {
         assertEquals(DayType.JORNADA_CORTA, m[ym.atDay(24)])
         assertEquals(DayType.SABADO_FR, m[ym.atDay(30)])
         assertEquals(31, m.size)
+    }
+
+    /** Fila Enero–Marzo 2026 como la ve ML Kit: el título partido en palabras («ENERO», «/», «URTARRILA»). */
+    private fun firstRow2026(): Triple<FakeImage, List<TextItem>, List<TextItem>> {
+        val img = FakeImage(1000, 300)
+        val lines = ArrayList<TextItem>()
+        val words = ArrayList<TextItem>()
+        val names = listOf("ENERO" to "URTARRILA", "FEBRERO" to "OTSAILA", "MARZO" to "MARTXOA")
+        lines += TextItem("2026 BH", 400, 0, 600, 40)
+        for ((i, nm) in names.withIndex()) {
+            val left = 20 + i * 320
+            val center = left + 140
+            // Título centrado sobre el bloque; la palabra del mes queda a la izquierda del centro.
+            lines += TextItem("${nm.first} / ${nm.second}", center - 110, 50, center + 110, 66)
+            words += TextItem(nm.first, center - 110, 50, center - 40, 66)
+            words += TextItem("/", center - 30, 50, center - 20, 66)
+            words += TextItem(nm.second, center - 10, 50, center + 110, 66)
+            val ym = YearMonth.of(2026, i + 1)
+            val offset = ym.atDay(1).dayOfWeek.value - 1
+            for (d in 1..ym.lengthOfMonth()) {
+                val col = (d - 1 + offset) % 7; val row = (d - 1 + offset) / 7
+                val cx = left + 20 + col * 40; val cy = 100 + row * 24
+                if (col == 6) img.fill(cx, cy, 18, 10, 0xFF0000)
+                if (col == 5) img.fill(cx, cy, 18, 10, 0x00B050)
+                if (d >= 10) words += TextItem("$d", cx - 8, cy - 7, cx + 8, cy + 7)
+            }
+        }
+        return Triple(img, lines, words)
+    }
+
+    @Test
+    fun januaryInFirstColumnWithSplitTitles() {
+        val (img, lines, words) = firstRow2026()
+        val cal = AnnualCalendarParser.parse(lines, img, 2025, words = words)
+        assertNotNull(cal)
+        assertEquals(2026, cal.year)
+        assertEquals(listOf(1, 2, 3), cal.months)
+        assertEquals(DayType.LABORABLE, cal.days[LocalDate.of(2026, 1, 1)])
+        assertEquals(DayType.SABADO_FR, cal.days[LocalDate.of(2026, 1, 3)])
+        assertEquals(DayType.FESTIVO, cal.days[LocalDate.of(2026, 1, 4)])
+        assertEquals(DayType.FESTIVO, cal.days[LocalDate.of(2026, 1, 25)])
+        assertEquals(DayType.FESTIVO, cal.days[LocalDate.of(2026, 3, 29)])
+    }
+
+    @Test
+    fun onlySplitWordsStillFindsJanuary() {
+        // Sin las líneas completas (sólo palabras sueltas), también debe encontrar enero.
+        val (img, lines, words) = firstRow2026()
+        val cal = AnnualCalendarParser.parse(words + lines.take(1), img, 2025)
+        assertNotNull(cal)
+        assertEquals(listOf(1, 2, 3), cal.months)
+        assertEquals(DayType.FESTIVO, cal.days[LocalDate.of(2026, 1, 11)])
     }
 
     @Test

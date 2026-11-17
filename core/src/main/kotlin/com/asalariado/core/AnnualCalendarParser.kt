@@ -77,13 +77,19 @@ object AnnualCalendarParser {
      * @param defaultYear año si no aparece en la imagen.
      * @param forcedYear año elegido por el usuario (manda sobre el detectado).
      */
-    fun parse(lines: List<TextItem>, pixels: PixelSource, defaultYear: Int, forcedYear: Int? = null): AnnualCalendar? {
-        val words = splitWords(lines)
+    fun parse(
+        lines: List<TextItem>,
+        pixels: PixelSource,
+        defaultYear: Int,
+        forcedYear: Int? = null,
+        /** Palabras con su caja exacta, si el OCR las da (mejor que repartir las líneas). */
+        words: List<TextItem>? = null,
+    ): AnnualCalendar? {
         val year = forcedYear ?: detectYear(lines) ?: defaultYear
 
-        val headers = words.mapNotNull { w -> monthOf(w.text)?.let { Header(it, w) } }
+        val headers = findHeaders(lines)
         if (headers.isEmpty()) return null
-        val nums = words.filter { numberRe.matches(it.text) }
+        val nums = (words ?: splitWords(lines)).let { splitWords(it) }.filter { numberRe.matches(it.text) }
             .map { Num(it.text.toInt(), (it.left + it.right) / 2.0, (it.top + it.bottom) / 2.0) }
 
         // Ancho de cada bloque de mes: distancia típica entre títulos de la misma fila.
@@ -94,24 +100,21 @@ object AnnualCalendarParser {
         val blockW = gaps.minOrNull() ?: pixels.width.toDouble()
 
         data class Fit(val h: Header, val a: Double, val b: Double, val c: Double, val d: Double, val inliers: Int)
-        val fits = ArrayList<Fit>()
-        for (h in headers) {
-            // El bloque del mes termina en la siguiente fila de títulos (o en una tabla resumen).
-            val below = headers.filter { o -> o !== h && o.cy > h.cy + headerH }
-                .minOfOrNull { it.item.top.toDouble() } ?: pixels.height.toDouble()
+
+        fun fitMonth(h: Header, centerX: Double, below: Double): Fit? {
             val ym = YearMonth.of(year, h.month)
             val offset = ym.atDay(1).dayOfWeek.value - 1
             val cand = nums.filter {
                 it.value in 1..ym.lengthOfMonth() &&
-                    abs(it.cx - h.cx) < blockW * 0.5 &&
+                    abs(it.cx - centerX) < blockW * 0.5 &&
                     it.cy > h.item.bottom && it.cy < below
             }
-            if (cand.size < 4) continue
+            if (cand.size < 4) return null
             val cols = cand.map { ((it.value - 1 + offset) % 7).toDouble() to it.cx }
             val rows = cand.map { ((it.value - 1 + offset) / 7).toDouble() to it.cy }
-            var (a, b) = theilSen(cols) ?: continue
-            var (c, d) = theilSen(rows) ?: continue
-            if (b <= 0 || d <= 0) continue
+            var (a, b) = theilSen(cols) ?: return null
+            var (c, d) = theilSen(rows) ?: return null
+            if (b <= 0 || d <= 0) return null
             fun isInlier(i: Int) = abs(a + b * cols[i].first - cols[i].second) < b * 0.35 &&
                 abs(c + d * rows[i].first - rows[i].second) < d * 0.35
             // Afinar con mínimos cuadrados usando sólo los números que encajan.
@@ -121,7 +124,20 @@ object AnnualCalendarParser {
                 leastSquares(idx.map { rows[it] })?.let { (nc, nd) -> if (nd > 0) { c = nc; d = nd } }
             }
             val inliers = cand.indices.count(::isInlier)
-            if (inliers >= 4) fits += Fit(h, a, b, c, d, inliers)
+            return if (inliers >= 4) Fit(h, a, b, c, d, inliers) else null
+        }
+
+        val fits = ArrayList<Fit>()
+        for (h in headers) {
+            // El bloque del mes termina en la siguiente fila de títulos (o en una tabla resumen).
+            val below = headers.filter { o -> o !== h && o.cy > h.cy + headerH }
+                .minOfOrNull { it.item.top.toDouble() } ?: pixels.height.toDouble()
+            // Varias posiciones de partida por si el título no está centrado sobre su mes.
+            val first = listOf(0.0, -0.25, 0.25).firstNotNullOfOrNull { k -> fitMonth(h, h.cx + k * blockW, below) }
+                ?: continue
+            // Segunda pasada centrada en la cuadrícula encontrada (columna central = 3).
+            val second = fitMonth(h, first.a + first.b * 3, below)
+            fits += if (second != null && second.inliers >= first.inliers) second else first
         }
         // Si un mes sale repetido (p. ej. en una tabla resumen), se queda el que mejor encaja.
         val best = fits.groupBy { it.h.month }.mapValues { (_, l) -> l.maxBy { it.inliers } }
@@ -141,6 +157,28 @@ object AnnualCalendarParser {
             }
         }
         return AnnualCalendar(year, days, best.keys.sorted())
+    }
+
+    /**
+     * Títulos de mes con su caja completa («ENERO / URTARRILA»), para que su centro coincida
+     * con el del bloque del mes aunque el OCR separe las palabras o junte varios títulos en una línea.
+     */
+    private fun findHeaders(lines: List<TextItem>): List<Header> {
+        val out = ArrayList<Header>()
+        for (line in lines) {
+            val ws = splitWords(listOf(line))
+            val idx = ws.indices.filter { monthOf(ws[it].text) != null }
+            idx.forEachIndexed { k, i ->
+                val endIdx = (if (k + 1 < idx.size) idx[k + 1] else ws.size) - 1
+                val span = ws.subList(i, endIdx + 1)
+                val box = TextItem(
+                    span.joinToString(" ") { it.text },
+                    span.minOf { it.left }, span.minOf { it.top }, span.maxOf { it.right }, span.maxOf { it.bottom },
+                )
+                out += Header(monthOf(ws[i].text)!!, box)
+            }
+        }
+        return out
     }
 
     /** Año del calendario: el «20xx» escrito con letra más grande (normalmente el título). */

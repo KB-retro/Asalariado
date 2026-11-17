@@ -302,6 +302,13 @@ private fun AnnualPreview(
             )
             Text("Comprueba que los colores coinciden con tu calendario; luego podrás cambiar cualquier día tocándolo.",
                 style = MaterialTheme.typography.bodySmall)
+            val missing = (1..12).filter { it !in annual.months }
+            if (missing.isNotEmpty()) Text(
+                "No he encontrado: ${missing.joinToString(", ") { monthName(it).lowercase() }}. Guarda lo que sí ha salido " +
+                    "y vuelve a importar una captura recortada de ese mes: se añadirá al resto del año.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
         item {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
