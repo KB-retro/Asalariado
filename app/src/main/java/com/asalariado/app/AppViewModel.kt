@@ -64,6 +64,8 @@ data class ImportState(
     val aiUsed: Boolean = false,
     /** Aviso sobre la lectura con IA (p. ej. por qué no se pudo usar). */
     val aiNote: String? = null,
+    /** Texto que se enseña mientras se lee (p. ej. «Leyendo con IA…»). */
+    val loadingText: String? = null,
     val year: Int = LocalDate.now().year,
     val month: Int = LocalDate.now().monthValue,
 )
@@ -434,35 +436,58 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private var lastUris: List<Uri> = emptyList()
 
-    fun runOcr(uris: List<Uri>) = viewModelScope.launch {
-        if (uris.isEmpty()) return@launch
+    fun runOcr(uris: List<Uri>) {
+        importJob?.cancel()
+        importJob = viewModelScope.launch { runOcrJob(uris) }
+    }
+
+    private suspend fun runOcrJob(uris: List<Uri>) {
+        if (uris.isEmpty()) return
         lastUris = uris
         import.value = import.value.copy(
             loading = true, error = null, annual = null, rows = emptyList(), rawText = "", aiUsed = false, aiNote = null,
         )
         // Calendario anual con clave de Gemini: se lee con IA y, si falla, con el lector normal.
         if (import.value.annualMode && geminiKey.value != null) {
-            if (readWithAiNow()) return@launch
+            if (readWithAiNow()) return
+            import.value = import.value.copy(loading = true, loadingText = "Leyendo con el lector del móvil…")
         }
         try {
             lastOcr = uris.flatMap { Ocr.recognize(getApplication(), it, payslipPassword.value) }
             withContext(Dispatchers.Default) { reparseNow(detect = true) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             import.value = import.value.copy(loading = false, error = "No se pudo leer el archivo: ${e.message}")
         }
     }
 
+    private var importJob: kotlinx.coroutines.Job? = null
+
+    /** Cancela la lectura en curso (p. ej. si la IA tarda mucho). */
+    fun cancelReading() {
+        importJob?.cancel()
+        importJob = null
+        import.value = import.value.copy(loading = false, loadingText = null, aiNote = "Lectura cancelada.")
+    }
+
     /** Vuelve a leer con IA el último archivo elegido (botón «Leer con IA»). */
-    fun readWithAi() = viewModelScope.launch {
-        if (lastUris.isEmpty() || geminiKey.value == null) return@launch
+    fun readWithAi() {
+        importJob?.cancel()
+        importJob = viewModelScope.launch { readWithAiJob() }
+    }
+
+    private suspend fun readWithAiJob() {
+        if (lastUris.isEmpty() || geminiKey.value == null) return
         import.value = import.value.copy(loading = true, error = null, aiNote = null)
         if (!readWithAiNow()) {
+            import.value = import.value.copy(loadingText = "Leyendo con el lector del móvil…")
             if (lastOcr.isNotEmpty()) withContext(Dispatchers.Default) { reparseNow(detect = false) }
             else runCatching {
                 lastOcr = lastUris.flatMap { Ocr.recognize(getApplication(), it, payslipPassword.value) }
                 withContext(Dispatchers.Default) { reparseNow(detect = true) }
             }
-            import.value = import.value.copy(loading = false, aiNote = aiFailure)
+            import.value = import.value.copy(loading = false, loadingText = null, aiNote = aiFailure)
         }
     }
 
@@ -471,6 +496,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Lee con Gemini los archivos elegidos; true si ha salido bien. */
     private suspend fun readWithAiNow(): Boolean {
         val key = geminiKey.value ?: return false
+        import.value = import.value.copy(loadingText = "Leyendo con IA (Gemini)… puede tardar hasta un par de minutos")
         return try {
             val cals = withContext(Dispatchers.IO) {
                 lastUris.map { GeminiReader.readCalendar(getApplication(), it, key, payslipPassword.value) }
@@ -483,11 +509,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching { d.withYear(year) }.getOrDefault(d) }, months)
             aiFailure = null
             import.value = import.value.copy(
-                loading = false, annual = cal, error = null, aiUsed = true, yearDetected = import.value.annualYear == null,
+                loading = false, loadingText = null, annual = cal, error = null, aiUsed = true, yearDetected = import.value.annualYear == null,
                 rawText = "Leído con IA (Gemini): ${months.size} meses del año ${cal.year}.",
                 aiNote = if (months.size < 12) "La IA sólo ha encontrado ${months.size} meses: revisa el calendario." else null,
             )
             true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             aiFailure = "No se pudo leer con IA: ${e.message}. Se ha usado el lector normal."
             import.value = import.value.copy(aiNote = aiFailure)
@@ -592,6 +620,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearImport() {
+        importJob?.cancel()
+        importJob = null
         lastOcr = emptyList()
         lastUris = emptyList()
         import.value = ImportState(annualMode = import.value.annualMode)

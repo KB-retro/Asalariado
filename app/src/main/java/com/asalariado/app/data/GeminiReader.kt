@@ -37,11 +37,15 @@ object GeminiReader {
             .toString()
 
         var lastError: AiError? = null
+        // Tiempo máximo para toda la lectura, con reintentos y cambios de modelo incluidos.
+        val deadline = System.currentTimeMillis() + 150_000L
+        fun left() = deadline - System.currentTimeMillis()
         val models = (PREFERRED + listOfNotNull(runCatching { newestFlash(key) }.getOrNull()) + FALLBACK).distinct()
         for (model in models) {
             // Si Google está saturado (503/500), se reintenta un par de veces y luego se prueba otro modelo.
             for (attempt in 0..2) {
-                val (code, text) = http("$BASE/models/$model:generateContent", key, body)
+                if (left() < 8_000) throw AiError("Gemini está tardando demasiado; prueba en unos minutos")
+                val (code, text) = http("$BASE/models/$model:generateContent", key, body, left().toInt())
                 when {
                     code == 200 -> return parse(text)
                     code == 404 -> { lastError = AiError("modelo $model no disponible"); break }
@@ -51,7 +55,7 @@ object GeminiReader {
                     code == 429 -> { lastError = AiError("se ha superado el límite gratuito de Gemini; prueba más tarde"); break }
                     code >= 500 -> {
                         lastError = AiError("los servidores de Gemini están saturados ahora mismo; prueba en unos minutos")
-                        if (attempt < 2) Thread.sleep(if (attempt == 0) 2_000L else 6_000L)
+                        if (attempt < 2) Thread.sleep(minOf(if (attempt == 0) 2_000L else 6_000L, maxOf(0L, left() - 8_000)))
                     }
                     else -> throw AiError("Gemini respondió con error $code: ${googleMessage(text)}")
                 }
@@ -81,11 +85,11 @@ object GeminiReader {
         return "image/jpeg" to out.toByteArray()
     }
 
-    private fun http(url: String, key: String, body: String?): Pair<Int, String> {
+    private fun http(url: String, key: String, body: String?, timeoutMs: Int = 20_000): Pair<Int, String> {
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
             conn.connectTimeout = 20_000
-            conn.readTimeout = 120_000
+            conn.readTimeout = timeoutMs.coerceIn(5_000, 120_000)
             conn.setRequestProperty("x-goog-api-key", key)
             if (body != null) {
                 conn.requestMethod = "POST"
@@ -97,6 +101,8 @@ object GeminiReader {
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() } ?: ""
             return code to text
+        } catch (e: java.net.SocketTimeoutException) {
+            throw AiError("Gemini está tardando demasiado; prueba en unos minutos")
         } catch (e: java.io.IOException) {
             throw AiError("sin conexión con Google (${e.javaClass.simpleName})")
         } finally {

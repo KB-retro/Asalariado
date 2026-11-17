@@ -128,7 +128,7 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Condit
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 st.aiNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-                if (aiKey != null && !st.loading && !st.aiUsed && (st.annual != null || st.error != null)) {
+                if (aiKey != null && !st.loading && !st.aiUsed && (st.annual != null || st.error != null || st.aiNote != null)) {
                     OutlinedButton(onClick = { vm.readWithAi() }, modifier = Modifier.fillMaxWidth()) {
                         Text("Leer con IA (Gemini)")
                     }
@@ -156,7 +156,15 @@ fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Condit
             }
 
             when {
-                st.loading -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                st.loading -> Column(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    CircularProgressIndicator()
+                    st.loadingText?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    OutlinedButton(onClick = { vm.cancelReading() }) { Text("Cancelar") }
+                }
                 st.error != null -> Text(st.error!!, color = MaterialTheme.colorScheme.error)
                 st.annual != null || st.annualMode -> {}
                 st.rawText.isNotEmpty() && st.rows.isEmpty() -> {
