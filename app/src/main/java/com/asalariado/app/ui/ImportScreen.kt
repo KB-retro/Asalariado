@@ -72,6 +72,12 @@ import java.time.LocalDate
 fun ImportScreen(vm: AppViewModel, existing: Map<LocalDate, DayEntry>, c: Conditions, initialUri: Uri?, onClose: () -> Unit) {
     val st by vm.import.collectAsState()
     val aiKey by vm.geminiKey.collectAsState()
+    // Mientras se lee (sobre todo con IA) la pantalla no se apaga: si se apaga, Android corta internet a la app.
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(st.loading) {
+        view.keepScreenOn = st.loading
+        onDispose { view.keepScreenOn = false }
+    }
     var showRaw by remember { mutableStateOf(false) }
     var editIndex by remember { mutableStateOf<Int?>(null) }
 

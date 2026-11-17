@@ -496,7 +496,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Lee con Gemini los archivos elegidos; true si ha salido bien. */
     private suspend fun readWithAiNow(): Boolean {
         val key = geminiKey.value ?: return false
-        import.value = import.value.copy(loadingText = "Leyendo con IA (Gemini)… puede tardar hasta un par de minutos")
+        import.value = import.value.copy(loadingText = "Leyendo con IA (Gemini)… puede tardar hasta un par de minutos. No salgas de la app.")
         return try {
             val cals = withContext(Dispatchers.IO) {
                 lastUris.map { GeminiReader.readCalendar(getApplication(), it, key, payslipPassword.value) }
