@@ -70,4 +70,14 @@ dependencies {
 
     // OCR en el propio móvil (modelo incluido, funciona sin conexión).
     implementation("com.google.mlkit:text-recognition:16.0.1")
+
+    // Leer nóminas en PDF (también con contraseña) sin OCR.
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    // Guardar la contraseña de las nóminas cifrada.
+    implementation("androidx.security:security-crypto:1.0.0")
+    // Avisos y copias automáticas.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    // Widget de la pantalla de inicio.
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.glance:glance-material3:1.1.1")
 }

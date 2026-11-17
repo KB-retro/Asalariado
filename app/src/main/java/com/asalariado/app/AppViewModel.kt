@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.asalariado.app.data.AppDatabase
 import com.asalariado.app.data.Backup
+import com.asalariado.app.data.PdfText
+import com.asalariado.app.data.SecureStore
 import com.asalariado.app.data.toExtraEntity
 import com.asalariado.app.data.StoppageEntity
 import com.asalariado.core.Stoppage
@@ -63,8 +65,18 @@ data class ImportState(
 /** Nómina leída de un PDF o imagen, pendiente de confirmar. */
 data class PayslipImport(
     val loading: Boolean = false,
+    val items: List<ImportedPayslip> = emptyList(),
+)
+
+/** Una nómina leída: sus datos, a qué mes va, si es paga extra y su PDF sin contraseña. */
+data class ImportedPayslip(
     val data: PayslipData? = null,
     val error: String? = null,
+    val year: Int = LocalDate.now().year,
+    val month: Int = LocalDate.now().monthValue,
+    val asExtra: Boolean = false,
+    val include: Boolean = true,
+    val pdf: ByteArray? = null,
 )
 
 data class ImportRow(val day: ParsedDay, val include: Boolean = true)
@@ -255,29 +267,87 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val payslipImport = MutableStateFlow(PayslipImport())
 
-    fun readPayslip(uri: Uri) = viewModelScope.launch {
+    private val secure = SecureStore(app)
+
+    /** Contraseña de los PDF de las nóminas (la misma para todas), guardada cifrada. */
+    val payslipPassword = MutableStateFlow(secure.payslipPassword)
+    fun savePayslipPassword(p: String?) {
+        secure.payslipPassword = p
+        payslipPassword.value = p
+    }
+
+    /** Lee una o varias nóminas (PDF, con o sin contraseña, o capturas). */
+    fun readPayslips(uris: List<Uri>) = viewModelScope.launch {
+        if (uris.isEmpty()) return@launch
         payslipImport.value = PayslipImport(loading = true)
-        payslipImport.value = try {
-            val pages = Ocr.recognize(getApplication(), uri)
-            val data = PayslipParser.parse(pages.flatMap { it.lines })
-            if (data.isUseful) PayslipImport(data = data)
-            else PayslipImport(error = "No he encontrado los importes de la nómina (total devengos, líquido…).")
-        } catch (e: Exception) {
-            PayslipImport(error = "No se pudo leer la nómina: ${e.message}")
+        val app = getApplication<Application>()
+        val items = uris.map { uri ->
+            try {
+                var pdf: ByteArray? = null
+                val lines = withContext(Dispatchers.IO) {
+                    if (PdfText.isPdf(app, uri)) {
+                        val doc = PdfText.read(app, uri, payslipPassword.value)
+                        pdf = doc.unlocked
+                        if (doc.images.isEmpty()) doc.pages.flatten()
+                        else doc.images.flatMap { Ocr.recognizeBitmap(it).lines }
+                    } else {
+                        Ocr.recognize(app, uri).flatMap { it.lines }
+                    }
+                }
+                val data = PayslipParser.parse(lines)
+                if (!data.isUseful) ImportedPayslip(error = "No he encontrado los importes (total devengos, líquido…).")
+                else ImportedPayslip(
+                    data = data,
+                    year = data.year ?: LocalDate.now().year,
+                    month = data.month ?: LocalDate.now().monthValue,
+                    asExtra = data.isExtra,
+                    pdf = pdf,
+                )
+            } catch (e: PdfText.WrongPassword) {
+                ImportedPayslip(
+                    error = if (payslipPassword.value == null) "El PDF tiene contraseña: ponla en Ajustes → Nóminas."
+                    else "La contraseña guardada no abre este PDF.",
+                )
+            } catch (e: Exception) {
+                ImportedPayslip(error = "No se pudo leer: ${e.message}")
+            }
         }
+        payslipImport.value = PayslipImport(items = items)
+    }
+
+    fun updateImportedPayslip(index: Int, item: ImportedPayslip) {
+        val list = payslipImport.value.items.toMutableList()
+        if (index in list.indices) list[index] = item
+        payslipImport.value = payslipImport.value.copy(items = list)
     }
 
     fun clearPayslipImport() { payslipImport.value = PayslipImport() }
 
-    /** Guarda la nómina leída y, si se pide, actualiza las condiciones con sus datos. */
-    fun commitPayslip(year: Int, month: Int, updateConditions: Boolean, asExtra: Boolean) = viewModelScope.launch {
-        val p = payslipImport.value.data ?: return@launch
-        val slip = Payslip(year, month, p.totalDevengos, p.liquido, "Importada")
-        if (asExtra) dao.saveExtraPayslip(slip.toExtraEntity()) else dao.savePayslip(slip.toEntity())
-        // Una paga extra no trae prima, plus ni descuentos: sólo se aprovecha el IRPF.
-        if (updateConditions && asExtra) {
-            p.irpfPercent?.let { store.save(conditions.value.copy(irpfPercent = it)) }
-        } else if (updateConditions) {
+    /** Archivo donde se guarda la copia (sin contraseña) del PDF de una nómina. */
+    fun payslipFile(year: Int, month: Int, extra: Boolean): java.io.File =
+        java.io.File(getApplication<Application>().filesDir, "nominas/%04d-%02d%s.pdf".format(year, month, if (extra) "-extra" else ""))
+
+    /**
+     * Guarda todas las nóminas leídas (con su PDF) y, si se pide, actualiza las condiciones con los
+     * datos de la nómina normal más reciente.
+     */
+    fun commitPayslips(updateConditions: Boolean) = viewModelScope.launch {
+        val ok = payslipImport.value.items.filter { it.data != null && it.include }
+        for (it in ok) {
+            val p = it.data!!
+            val slip = Payslip(it.year, it.month, p.totalDevengos, p.liquido, "Importada", p.irpfPercent)
+            if (it.asExtra) dao.saveExtraPayslip(slip.toExtraEntity()) else dao.savePayslip(slip.toEntity())
+            it.pdf?.let { bytes ->
+                withContext(Dispatchers.IO) {
+                    val f = payslipFile(it.year, it.month, it.asExtra)
+                    f.parentFile?.mkdirs()
+                    f.writeBytes(bytes)
+                }
+            }
+        }
+        val latest = ok.filter { !it.asExtra }.maxByOrNull { it.year * 12 + it.month }?.data
+        if (updateConditions && latest != null) {
+            val p = latest
             var c = conditions.value
             p.escalon?.let { e -> if (TablaSalarial.BELLOTA_2026.escalon(e) != null) c = TablaSalarial.BELLOTA_2026.aplicar(c, e) }
             c = c.copy(
@@ -289,9 +359,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 ssPercent = p.ssPercent ?: c.ssPercent,
                 geroaPercent = p.geroaPercent ?: c.geroaPercent,
                 employerMonthlyExtras = p.seguroVida ?: c.employerMonthlyExtras,
+                seniorityDate = p.seniorityDate ?: c.seniorityDate,
             )
             store.save(c)
         }
+        message.value = "${ok.size} nómina(s) guardada(s)"
         clearPayslipImport()
     }
 

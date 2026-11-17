@@ -211,6 +211,7 @@ fun CalendarScreen(
             c = c,
             strikeHours = stoppages.firstOrNull { it.date == date && it.kind == StoppageKind.STRIKE }?.hours ?: 0.0,
             assemblyHours = stoppages.firstOrNull { it.date == date && it.kind == StoppageKind.ASSEMBLY }?.hours ?: 0.0,
+            overtimeHours = stoppages.firstOrNull { it.date == date && it.kind == StoppageKind.OVERTIME }?.hours ?: 0.0,
             onStoppage = { k, h -> vm.setStoppage(date, k, h) },
             onType = { vm.setCalendarType(date, it) },
             onDismiss = { editing = null },
@@ -468,6 +469,7 @@ private fun MonthSummaryCard(
         if (s.activableDays > 0) KeyValue("Activables trabajados", "${s.activableDays} (${hours(s.activableHours)})")
         if (s.strikeHours > 0) KeyValue("Huelga / paros (sin cobrar)", hours(s.strikeHours))
         if (s.assemblyHours > 0) KeyValue("Asambleas (sin prima)", hours(s.assemblyHours))
+        if (s.overtimeHours > 0) KeyValue("Horas extra / compensadas", "${hours(s.overtimeHours)} · ${money(s.overtimePay)}")
         if (s.parentalDays > 0) KeyValue("Permiso por nacimiento", "${s.parentalDays} días")
         s.extra?.let { KeyValue("Paga extra (hacia el ${it.day})", money(it.gross)) }
         if (s.medicalHours > 0) KeyValue("Horas de médico (justificadas)", hours(s.medicalHours))
@@ -498,6 +500,7 @@ private fun DayDialog(
     c: Conditions,
     strikeHours: Double,
     assemblyHours: Double,
+    overtimeHours: Double,
     onStoppage: (StoppageKind, Double) -> Unit,
     onType: (DayType?) -> Unit,
     onDismiss: () -> Unit,
@@ -506,6 +509,7 @@ private fun DayDialog(
 ) {
     var strike by remember { mutableStateOf(strikeHours) }
     var assembly by remember { mutableStateOf(assemblyHours) }
+    var overtime by remember { mutableStateOf(overtimeHours) }
     var untilOn by remember { mutableStateOf(false) }
     var until by remember { mutableStateOf(date.plusWeeks(16).minusDays(1)) }
     var shift by remember { mutableStateOf(entry?.shift ?: ShiftType.MORNING) }
@@ -576,6 +580,19 @@ private fun DayDialog(
                 }
                 if (untilOn) DateButton(until, Modifier.fillMaxWidth(), "Hasta") { until = it }
 
+                if (shift != ShiftType.PARENTAL && shift != ShiftType.STRIKE) {
+                    NumberField("Horas extra / compensadas", overtime, Modifier.fillMaxWidth(), "h") { overtime = it }
+                    Text(
+                        "Se pagan a ${money(Payroll.overtimePrice(date, type, c))}/h (${
+                            when {
+                                date.dayOfWeek == java.time.DayOfWeek.SUNDAY || type == DayType.FESTIVO -> "domingo o festivo"
+                                date.dayOfWeek == java.time.DayOfWeek.SATURDAY || type?.activable == true -> "sábado"
+                                else -> "laborable"
+                            }
+                        }).",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (shift.isWork) {
                     Text("Paros y asambleas", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -600,6 +617,7 @@ private fun DayDialog(
                 } else null
                 if (strike != strikeHours) onStoppage(StoppageKind.STRIKE, if (shift.isWork) strike else 0.0)
                 if (assembly != assemblyHours) onStoppage(StoppageKind.ASSEMBLY, if (shift.isWork) assembly else 0.0)
+                if (overtime != overtimeHours) onStoppage(StoppageKind.OVERTIME, overtime)
                 onSave(
                     DayEntry(date, shift, autoEnd?.first ?: start, autoEnd?.second ?: end, holiday && shift.isWork, note),
                     if (untilOn) until else null,

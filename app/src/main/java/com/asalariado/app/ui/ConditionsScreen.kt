@@ -40,6 +40,8 @@ import com.asalariado.core.Conditions
 import com.asalariado.core.ShiftHours
 import com.asalariado.core.ShiftType
 import com.asalariado.core.TablaSalarial
+import java.time.LocalDate
+import java.time.YearMonth
 import java.time.DayOfWeek
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -177,7 +179,44 @@ fun ConditionsScreen(c: Conditions, onSave: (Conditions) -> Unit) {
             NumberField("Activables obligatorios al año", d.maxActivablesPerYear.toDouble(), Modifier.fillMaxWidth(), "días") {
                 d = d.copy(maxActivablesPerYear = it.toInt())
             }
-            NumberField("Precio hora extra (0 = hora ordinaria)", d.overtimePrice, Modifier.fillMaxWidth(), "€") { d = d.copy(overtimePrice = it) }
+            NumberField("Plus turno de noche (por jornada > 4 h)", d.nightShiftBonus, Modifier.fillMaxWidth(), "€") { d = d.copy(nightShiftBonus = it) }
+            Text("Horas extra / compensadas (se apuntan en cada día):", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumberField("Laborable", d.overtimeWeekdayPrice, Modifier.weight(1f), "€") { d = d.copy(overtimeWeekdayPrice = it) }
+                NumberField("Sábado", d.overtimeSaturdayPrice, Modifier.weight(1f), "€") { d = d.copy(overtimeSaturdayPrice = it) }
+                NumberField("Dom./fest.", d.overtimeSundayPrice, Modifier.weight(1f), "€") { d = d.copy(overtimeSundayPrice = it) }
+            }
+            NumberField("Precio hora extra si no hay otro (0 = hora ordinaria)", d.overtimePrice, Modifier.fillMaxWidth(), "€") { d = d.copy(overtimePrice = it) }
+            Text(
+                "Con el escalón elegido se rellenan según la tabla: laborable = salario hora + 10,73 €; " +
+                    "sábado = salario anual / 1592 + 42 %; domingo o festivo = + 66 %; turno de noche 7,92 €.",
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+
+        SectionCard("Antigüedad", icon = Icons.Default.Schedule) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                DateButton(d.seniorityDate ?: LocalDate.now(), Modifier.weight(1f), "Desde") { d = d.copy(seniorityDate = it) }
+                NumberField("Por quinquenio", d.quinquenioMonthly, Modifier.weight(1f), "€/mes") { d = d.copy(quinquenioMonthly = it) }
+            }
+            val q = d.quinquenios(YearMonth.now())
+            Text(
+                (if (d.seniorityDate == null) "Pon la fecha de antigüedad de tu nómina. " else "Llevas $q quinquenio${if (q == 1) "" else "s"}. ") +
+                    "Cada 5 años se suma el importe al jornal, a las pagas extra y a la base de cotización.",
+                style = MaterialTheme.typography.labelSmall,
+            )
+            d.seniorityDate?.let { from ->
+                val next = from.plusYears(((q + 1) * 5).toLong())
+                Text("Próximo quinquenio: ${next.format(shortFmt)} ${next.year}", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        SectionCard("Cómo descuenta la empresa", icon = Icons.Default.Euro) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(d.discountsNextMonth, { d = d.copy(discountsNextMonth = it) })
+                Text("Los descuentos (médico, libre disposición, asambleas, huelga) llegan en la nómina del mes siguiente",
+                    style = MaterialTheme.typography.bodyMedium)
+            }
         }
 
         SectionCard("Permisos anuales", icon = Icons.Default.BeachAccess) {

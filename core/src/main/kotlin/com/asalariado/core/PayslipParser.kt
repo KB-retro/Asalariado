@@ -28,6 +28,9 @@ data class PayslipData(
     val pagaExtra: Double? = null,
     /** El recibo es el de una paga extra (julio / diciembre), no la nómina del mes. */
     val isExtra: Boolean = false,
+    /** Importe de antigüedad / quinquenios del mes y fecha desde la que cuenta la antigüedad. */
+    val antiguedad: Double? = null,
+    val seniorityDate: java.time.LocalDate? = null,
 ) {
     val isUseful: Boolean get() = totalDevengos != null || liquido != null || jornal != null
 }
@@ -94,6 +97,19 @@ object PayslipParser {
         val seguro = row { it.startsWith("SEGURODEVIDA") }
         val liquidoLabel = labels.firstOrNull { key(it.text).startsWith("TOTALLIQUIDO") }
         val pagaExtraLabel = labels.firstOrNull { key(it.text).startsWith("PAGAEXTRA") }
+        val antig = row { (it.startsWith("ANTIGUEDAD") || it.startsWith("QUINQUENIO") || it.startsWith("PLUSANTIG")) }
+            ?.values?.lastOrNull()
+        // Fecha de antigüedad: la fecha que aparece debajo de la casilla «ANTIGÜEDAD».
+        val dateRe = Regex("""^(\d{2})/(\d{2})/(\d{4})$""")
+        val seniorityDate = labels.firstOrNull { key(it.text).startsWith("ANTIGUEDAD") }?.let { l ->
+            labels.filter { d ->
+                val cy = (d.top + d.bottom) / 2.0
+                dateRe.matches(d.text.trim()) && cy > l.bottom && cy < l.bottom + h * 4 && d.right > l.left - h * 2 && d.left < l.right + h * 2
+            }.minByOrNull { it.top }?.let { d ->
+                val m = dateRe.find(d.text.trim())!!
+                runCatching { java.time.LocalDate.of(m.groupValues[3].toInt(), m.groupValues[2].toInt(), m.groupValues[1].toInt()) }.getOrNull()
+            }
+        }
         // Un concepto de paga extra con importe en su fila (no la casilla de bases de abajo).
         val extraConcept = labels.firstOrNull { l ->
             val k = key(l.text)
@@ -127,6 +143,8 @@ object PayslipParser {
             geroaPercent = geroa?.values?.takeIf { it.size >= 2 }?.first(),
             seguroVida = seguro?.values?.firstOrNull(),
             pagaExtra = pagaExtraLabel?.let { valueBelow(it) },
+            antiguedad = antig,
+            seniorityDate = seniorityDate,
             isExtra = extraConcept != null || (jornal == null && prima == null && devengos != null),
         )
     }

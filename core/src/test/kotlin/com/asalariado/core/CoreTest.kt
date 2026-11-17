@@ -118,6 +118,53 @@ class PayrollTest {
     }
 
     @Test
+    fun seniorityOvertimeNightAndIrpf() {
+        val cc = TablaSalarial.BELLOTA_2026.aplicar(Conditions(), 10).copy(
+            seniorityDate = LocalDate.of(2016, 4, 1), quinquenioMonthly = 30.0, irpfPercent = 15.0,
+        )
+        // 10 años en abril de 2026 = 2 quinquenios.
+        assertEquals(1, cc.quinquenios(YearMonth.of(2026, 3)))
+        assertEquals(2, cc.quinquenios(YearMonth.of(2026, 4)))
+        assertEquals(26.15, cc.overtimeSaturdayPrice, 0.01)
+        assertEquals(24.57, cc.overtimeWeekdayPrice, 0.01)
+        val days = listOf(
+            DayEntry(LocalDate.of(2026, 5, 4), ShiftType.NIGHT),
+            DayEntry(LocalDate.of(2026, 5, 5), ShiftType.MORNING),
+        )
+        val stops = listOf(
+            Stoppage(LocalDate.of(2026, 5, 9), StoppageKind.OVERTIME, 4.0), // sábado
+            Stoppage(LocalDate.of(2026, 5, 10), StoppageKind.OVERTIME, 2.0), // domingo
+        )
+        val base = Payroll.month(YearMonth.of(2026, 5), emptyList(), emptyList(), cc, null)
+        val m = Payroll.month(YearMonth.of(2026, 5), days, emptyList(), cc, null, stoppages = stops)
+        assertEquals(60.0, m.seniority, 0.001)
+        assertEquals(1, m.nightShifts)
+        assertEquals(7.92, m.nightShiftPlus, 0.001)
+        assertEquals(4 * 26.15 + 2 * cc.overtimeSundayPrice, m.overtimePay, 0.01)
+        assertEquals(22.16, m.nightPlus, 0.01)
+        assertEquals(base.expectedGross + m.overtimePay + 7.92 + m.nightPlus, m.expectedGross, 0.01)
+        // La paga extra incluye la antigüedad.
+        assertEquals(2094.02 + 60.0, Payroll.month(YearMonth.of(2026, 7), emptyList(), emptyList(), cc, null).extra!!.gross, 0.01)
+        // IRPF: el de la última nómina importada se usa para los meses siguientes.
+        val slips = listOf(Payslip(2026, 3, 3000.0, 2200.0, irpfPercent = 18.0))
+        val y = Payroll.year(2026, emptyList(), emptyList(), slips, cc)
+        assertEquals(15.0, y.months[1].irpfPercent, 0.001)
+        assertEquals(18.0, y.months[2].irpfPercent, 0.001)
+        assertEquals(18.0, y.months[8].irpfPercent, 0.001)
+    }
+
+    @Test
+    fun discountsNextMonth() {
+        val cc = TablaSalarial.BELLOTA_2026.aplicar(Conditions(), 10).copy(discountsNextMonth = true)
+        val med = listOf(MedicalVisit(date = LocalDate.of(2026, 9, 10), start = LocalTime.of(8, 0), end = LocalTime.of(9, 0)))
+        val stops = listOf(Stoppage(LocalDate.of(2026, 9, 11), StoppageKind.ASSEMBLY, 1.0))
+        val sep = Payroll.month(YearMonth.of(2026, 9), emptyList(), med, cc, null, stoppages = stops)
+        val oct = Payroll.month(YearMonth.of(2026, 10), emptyList(), med, cc, null, stoppages = stops)
+        assertEquals(0.0, sep.bonusDiscount + sep.assemblyDiscount, 0.001)
+        assertEquals(2 * 5.0621, oct.bonusDiscount + oct.assemblyDiscount, 0.001)
+    }
+
+    @Test
     fun parentalLeave() {
         val cc = Conditions(baseMonthly = 2000.0, bonusMonthly = 700.0, payments = 14, irpfPercent = 0.0, ssPercent = 0.0)
         // 16 semanas desde el 1 de marzo de 2026 (112 días: 1 mar – 20 jun).

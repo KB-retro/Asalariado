@@ -30,6 +30,14 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
@@ -135,6 +143,33 @@ fun SettingsScreen(vm: AppViewModel, prefs: UiPrefs) {
                 Backdrop.entries.forEach { b ->
                     BackdropPreview(b, selected = prefs.backdrop == b) { vm.saveUi(prefs.copy(backdrop = b)) }
                 }
+            }
+        }
+
+        SectionCard("Nóminas en PDF", icon = Icons.Default.Lock) {
+            val saved by vm.payslipPassword.collectAsState()
+            var pass by remember(saved) { mutableStateOf(saved ?: "") }
+            var visible by remember { mutableStateOf(false) }
+            Text(
+                "Si la empresa os manda las nóminas en PDF con contraseña, ponla aquí: la app abrirá todas las que importes. " +
+                    "Se guarda cifrada en el móvil.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedTextField(
+                pass, { pass = it },
+                label = { Text("Contraseña de las nóminas") },
+                singleLine = true,
+                visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { visible = !visible }) {
+                        Icon(if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility, "Mostrar")
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { vm.savePayslipPassword(pass.ifBlank { null }) }, enabled = pass != (saved ?: "")) { Text("Guardar") }
+                if (saved != null) OutlinedButton(onClick = { vm.savePayslipPassword(null) }) { Text("Quitar") }
             }
         }
 

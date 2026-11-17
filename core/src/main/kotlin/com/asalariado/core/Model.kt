@@ -4,6 +4,7 @@ import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.YearMonth
 
 /** Tipos de jornada que puede tener un día en el calendario. */
 enum class ShiftType(val code: String, val label: String, val isWork: Boolean) {
@@ -67,6 +68,8 @@ enum class StoppageKind(val label: String) {
     STRIKE("Paro / huelga por horas"),
     /** Asamblea: se cobra el salario base pero no la prima. */
     ASSEMBLY("Asamblea"),
+    /** Horas extra / compensadas: se pagan según el día (laborable, sábado o domingo/festivo). */
+    OVERTIME("Horas extra / compensadas"),
 }
 
 data class Stoppage(val date: LocalDate, val kind: StoppageKind, val hours: Double)
@@ -102,6 +105,8 @@ data class Payslip(
     val gross: Double?,
     val net: Double?,
     val note: String = "",
+    /** Porcentaje de IRPF que aplicó esa nómina (la empresa lo regulariza durante el año). */
+    val irpfPercent: Double? = null,
 )
 
 data class ShiftHours(val start: LocalTime, val end: LocalTime)
@@ -118,6 +123,17 @@ data class Conditions(
     val bonusPerHour: Double = 0.0,
     /** Salario por hora para descontar huelgas y paros (0 = jornal × pagas / horas anuales). */
     val salaryPerHour: Double = 0.0,
+    /** Antigüedad: fecha desde la que cuenta y lo que se cobra al mes por cada quinquenio (5 años). */
+    val seniorityDate: LocalDate? = null,
+    val quinquenioMonthly: Double = 0.0,
+    /** Los descuentos (médico, asambleas, huelga…) llegan en la nómina del mes siguiente. */
+    val discountsNextMonth: Boolean = false,
+    /** Precio de la hora compensada / extra según el día. */
+    val overtimeWeekdayPrice: Double = 0.0,
+    val overtimeSaturdayPrice: Double = 0.0,
+    val overtimeSundayPrice: Double = 0.0,
+    /** Plus por cada turno de noche de más de 4 horas. */
+    val nightShiftBonus: Double = 0.0,
     /** Aportación del trabajador a la EPSV (Geroa); la empresa aporta lo mismo. */
     val geroaPercent: Double = 0.0,
     /** Otros importes que paga la empresa y cotizan (p. ej. seguro de vida), al mes. */
@@ -157,6 +173,16 @@ data class Conditions(
 ) {
     /** Bruto anual: jornal en todas las pagas + prima en 12. */
     val grossAnnualSalary: Double get() = baseMonthly * maxOf(payments, 12) + bonusMonthly * 12
+
+    /** Quinquenios cumplidos al final de [ym]. */
+    fun quinquenios(ym: YearMonth): Int {
+        val from = seniorityDate ?: return 0
+        val years = java.time.Period.between(from, ym.atEndOfMonth()).years
+        return if (years < 0) 0 else years / 5
+    }
+
+    /** Antigüedad que se cobra en [ym]. */
+    fun seniorityMonthly(ym: YearMonth): Double = quinquenios(ym) * quinquenioMonthly
 
     /** Salario hora (sin prima) que se descuenta por cada hora de huelga. */
     val effectiveSalaryPerHour: Double get() =

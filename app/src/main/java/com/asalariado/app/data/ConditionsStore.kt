@@ -54,6 +54,14 @@ class ConditionsStore(context: Context) {
             put("personalDays", c.personalDays)
             put("medicalHoursPerYear", c.medicalHoursPerYear)
             put("normalDayHours", c.normalDayHours)
+            put("salaryPerHour", c.salaryPerHour)
+            c.seniorityDate?.let { put("seniorityDate", it.toString()) }
+            put("quinquenioMonthly", c.quinquenioMonthly)
+            put("discountsNextMonth", c.discountsNextMonth)
+            put("overtimeWeekdayPrice", c.overtimeWeekdayPrice)
+            put("overtimeSaturdayPrice", c.overtimeSaturdayPrice)
+            put("overtimeSundayPrice", c.overtimeSundayPrice)
+            put("nightShiftBonus", c.nightShiftBonus)
             put("shortDayHours", c.shortDayHours)
             put("activablePricePerHour", c.activablePricePerHour)
             put("maxActivablesPerYear", c.maxActivablesPerYear)
@@ -103,6 +111,14 @@ class ConditionsStore(context: Context) {
                 personalDays = o.optInt("personalDays", d.personalDays),
                 medicalHoursPerYear = o.optDouble("medicalHoursPerYear", d.medicalHoursPerYear),
                 normalDayHours = o.optDouble("normalDayHours", d.normalDayHours),
+                salaryPerHour = o.optDouble("salaryPerHour", d.salaryPerHour),
+                seniorityDate = o.optString("seniorityDate", "").takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it) },
+                quinquenioMonthly = o.optDouble("quinquenioMonthly", d.quinquenioMonthly),
+                discountsNextMonth = o.optBoolean("discountsNextMonth", d.discountsNextMonth),
+                overtimeWeekdayPrice = o.optDouble("overtimeWeekdayPrice", d.overtimeWeekdayPrice),
+                overtimeSaturdayPrice = o.optDouble("overtimeSaturdayPrice", d.overtimeSaturdayPrice),
+                overtimeSundayPrice = o.optDouble("overtimeSundayPrice", d.overtimeSundayPrice),
+                nightShiftBonus = o.optDouble("nightShiftBonus", d.nightShiftBonus),
                 shortDayHours = o.optDouble("shortDayHours", d.shortDayHours),
                 activablePricePerHour = o.optDouble("activablePricePerHour", d.activablePricePerHour),
                 maxActivablesPerYear = o.optInt("maxActivablesPerYear", d.maxActivablesPerYear),

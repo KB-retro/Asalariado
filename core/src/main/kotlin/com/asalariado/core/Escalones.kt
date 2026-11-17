@@ -37,6 +37,12 @@ data class TablaSalarial(
             bonusMonthly = e.primaMes,
             bonusPerHour = e.primaHora,
             salaryPerHour = e.salarioHora,
+            // Horas compensadas (tabla): laborable = salario hora + 10,7304 €; sábado y domingo/festivo =
+            // salario anual / 1592 + 42 % y + 66 %. Turno de noche: 7,92 € por jornada de más de 4 h.
+            overtimeWeekdayPrice = round2(e.salarioHora + 10.7304),
+            overtimeSaturdayPrice = round2(e.salarioAnual / jornadaAnual * 1.42),
+            overtimeSundayPrice = round2(e.salarioAnual / jornadaAnual * 1.66),
+            nightShiftBonus = 7.92,
             payments = 14,
             proratedExtras = false,
             extraPayMonths = listOf(7, 12),
@@ -45,6 +51,8 @@ data class TablaSalarial(
             annualHours = jornadaAnual,
         )
     }
+
+    private fun round2(v: Double) = Math.round(v * 100) / 100.0
 
     companion object {
         /** Bellota Herramientas – Tabla 1, personal MOD, vigencia 1.1.2026. */

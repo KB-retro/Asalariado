@@ -26,11 +26,11 @@ object Backup {
         }))
         root.put("payslips", JSONArray(dao.payslipsOnce().map {
             JSONObject().put("y", it.year).put("m", it.month).put("g", it.gross ?: JSONObject.NULL)
-                .put("n", it.net ?: JSONObject.NULL).put("note", it.note)
+                .put("n", it.net ?: JSONObject.NULL).put("note", it.note).put("irpf", it.irpf ?: JSONObject.NULL)
         }))
         root.put("extraPayslips", JSONArray(dao.extraPayslipsOnce().map {
             JSONObject().put("y", it.year).put("m", it.month).put("g", it.gross ?: JSONObject.NULL)
-                .put("n", it.net ?: JSONObject.NULL).put("note", it.note)
+                .put("n", it.net ?: JSONObject.NULL).put("note", it.note).put("irpf", it.irpf ?: JSONObject.NULL)
         }))
         root.put("stoppages", JSONArray(dao.stoppagesOnce().map {
             JSONObject().put("d", it.epochDay).put("k", it.kind).put("h", it.hours)
@@ -49,7 +49,7 @@ object Backup {
             dao.clearDays(); dao.clearMedical(); dao.clearPayslips(); dao.clearCalendar(); dao.clearExtraPayslips(); dao.clearStoppages()
             dao.insertStoppages(objs("stoppages").map { StoppageEntity(it.getLong("d"), it.getString("k"), it.getDouble("h")) })
             dao.insertExtraPayslips(objs("extraPayslips").map {
-                ExtraPayslipEntity(it.getInt("y"), it.getInt("m"), it.optDoubleOrNull("g"), it.optDoubleOrNull("n"), it.optString("note"))
+                ExtraPayslipEntity(it.getInt("y"), it.getInt("m"), it.optDoubleOrNull("g"), it.optDoubleOrNull("n"), it.optString("note"), it.optDoubleOrNull("irpf"))
             })
             dao.upsertDays(objs("days").map {
                 DayEntity(it.getLong("d"), it.getString("shift"), it.optIntOrNull("s"), it.optIntOrNull("e"),
@@ -61,7 +61,7 @@ object Backup {
                     it.optBoolean("just", true), it.optString("kind", "COMMON"))
             })
             dao.insertPayslips(objs("payslips").map {
-                PayslipEntity(it.getInt("y"), it.getInt("m"), it.optDoubleOrNull("g"), it.optDoubleOrNull("n"), it.optString("note"))
+                PayslipEntity(it.getInt("y"), it.getInt("m"), it.optDoubleOrNull("g"), it.optDoubleOrNull("n"), it.optString("note"), it.optDoubleOrNull("irpf"))
             })
         }
         return root.optJSONObject("conditions")

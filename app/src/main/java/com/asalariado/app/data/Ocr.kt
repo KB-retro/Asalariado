@@ -81,7 +81,7 @@ object Ocr {
         }
     }
 
-    private suspend fun recognizeBitmap(bitmap: Bitmap): Result {
+    suspend fun recognizeBitmap(bitmap: Bitmap): Result {
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         try {
             val text = suspendCancellableCoroutine { cont ->

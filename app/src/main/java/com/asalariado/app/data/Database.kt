@@ -54,6 +54,7 @@ data class PayslipEntity(
     val gross: Double?,
     val net: Double?,
     val note: String,
+    val irpf: Double? = null,
 )
 
 /** Recibo de una paga extra (julio / diciembre), que se cobra aparte de la nómina del mes. */
@@ -64,10 +65,11 @@ data class ExtraPayslipEntity(
     val gross: Double?,
     val net: Double?,
     val note: String,
+    val irpf: Double? = null,
 )
 
-fun ExtraPayslipEntity.toModel() = Payslip(year, month, gross, net, note)
-fun Payslip.toExtraEntity() = ExtraPayslipEntity(year, month, gross, net, note)
+fun ExtraPayslipEntity.toModel() = Payslip(year, month, gross, net, note, irpf)
+fun Payslip.toExtraEntity() = ExtraPayslipEntity(year, month, gross, net, note, irpfPercent)
 
 /** Horas de paro (huelga por horas) o de asamblea de un día. */
 @Entity(tableName = "stoppages", primaryKeys = ["epochDay", "kind"])
@@ -112,8 +114,8 @@ fun DayEntry.toEntity() = DayEntity(
 fun MedicalEntity.toModel() =
     MedicalVisit(id, LocalDate.ofEpochDay(epochDay), startMin.toTime(), endMin.toTime(), reason, justified, MedicalKind.fromName(kind))
 fun MedicalVisit.toEntity() = MedicalEntity(id, date.toEpochDay(), start.toMin(), end.toMin(), reason, justified, kind.name)
-fun PayslipEntity.toModel() = Payslip(year, month, gross, net, note)
-fun Payslip.toEntity() = PayslipEntity(year, month, gross, net, note)
+fun PayslipEntity.toModel() = Payslip(year, month, gross, net, note, irpf)
+fun Payslip.toEntity() = PayslipEntity(year, month, gross, net, note, irpfPercent)
 
 @Dao
 interface AppDao {
@@ -195,7 +197,7 @@ interface AppDao {
 
 @Database(
     entities = [DayEntity::class, MedicalEntity::class, PayslipEntity::class, CalendarDayEntity::class, ExtraPayslipEntity::class, StoppageEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -229,10 +231,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `payslips` ADD COLUMN `irpf` REAL")
+                db.execSQL("ALTER TABLE `extra_payslips` ADD COLUMN `irpf` REAL")
+            }
+        }
+
         @Volatile private var instance: AppDatabase? = null
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "asalariado.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build().also { instance = it }
         }
     }

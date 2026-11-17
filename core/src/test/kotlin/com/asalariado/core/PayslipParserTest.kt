@@ -9,6 +9,7 @@ class PayslipParserTest {
 
     /** Nómina de ejemplo con los importes del escalón 10 (texto como lo devuelve el OCR). */
     private val sample = listOf(
+        t("ANTIGUEDAD", 537, 544, 631), t("01/04/2024", 575, 548, 635),
         t("DEL01/10/2026AL31/10/2026", 627, 112, 344), t("ESCALON10", 627, 796, 901),
         t("Jornal", 750, 109, 162), t("2.094,02", 750, 740, 809),
         t("Prima", 770, 110, 160), t("745,38", 770, 754, 811),
@@ -48,6 +49,8 @@ class PayslipParserTest {
         assertEquals(2.3, p.geroaPercent)
         assertEquals(1.33, p.seguroVida)
         assertEquals(349.0, p.pagaExtra)
+        assertEquals(java.time.LocalDate.of(2024, 4, 1), p.seniorityDate)
+        assertEquals(null, p.antiguedad)
     }
 
     @Test
